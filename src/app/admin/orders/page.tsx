@@ -1,0 +1,227 @@
+"use client";
+
+import { Fragment, useEffect, useState } from "react";
+import { AdminShell } from "@/components/admin/AdminShell";
+import { Icon } from "@/components/ui/Icon";
+import { formatCurrency, formatDate } from "@/lib/format";
+import { useI18n } from "@/lib/useI18n";
+import type { Order, OrderStatus } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const STATUSES: OrderStatus[] = [
+  "pending",
+  "processing",
+  "shipped",
+  "delivered",
+  "cancelled",
+];
+
+const STATUS_TONE: Record<OrderStatus, string> = {
+  pending: "bg-amber-50 text-amber-700",
+  processing: "bg-blue-50 text-blue-700",
+  shipped: "bg-brand-50 text-brand-700",
+  delivered: "bg-emerald-50 text-emerald-700",
+  cancelled: "bg-red-50 text-red-700",
+};
+
+export default function OrdersAdminPage() {
+  const { t, locale } = useI18n();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [filter, setFilter] = useState<OrderStatus | "all">("all");
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  async function load() {
+    const res = await fetch("/api/orders", { cache: "no-store" });
+    const json = await res.json();
+    setOrders(json.data);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function setStatus(id: string, status: OrderStatus) {
+    await fetch(`/api/orders/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    await load();
+  }
+
+  const filtered = orders.filter(
+    (o) => filter === "all" || o.status === filter
+  );
+
+  return (
+    <AdminShell>
+      <div className="space-y-6">
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {t("admin.orders")}
+          </h1>
+          <p className="text-sm text-ink-500">
+            Track and update the status of every order.
+          </p>
+        </header>
+
+        <div className="flex flex-wrap gap-2">
+          <Chip
+            active={filter === "all"}
+            onClick={() => setFilter("all")}
+            label={`All (${orders.length})`}
+          />
+          {STATUSES.map((s) => {
+            const c = orders.filter((o) => o.status === s).length;
+            return (
+              <Chip
+                key={s}
+                active={filter === s}
+                onClick={() => setFilter(s)}
+                label={`${label(s)} (${c})`}
+              />
+            );
+          })}
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-soft">
+          <table className="min-w-full text-sm">
+            <thead className="bg-ink-50 text-ink-600">
+              <tr>
+                <th className="px-4 py-3 text-start font-medium">Order</th>
+                <th className="px-4 py-3 text-start font-medium">Customer</th>
+                <th className="px-4 py-3 text-start font-medium">Date</th>
+                <th className="px-4 py-3 text-end font-medium">Total</th>
+                <th className="px-4 py-3 text-start font-medium">Status</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-100">
+              {filtered.map((o) => (
+                <Fragment key={o.id}>
+                  <tr className="hover:bg-ink-50/50">
+                    <td className="px-4 py-3 font-medium">{o.id}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{o.customer.name}</div>
+                      <div className="text-xs text-ink-500">
+                        {o.customer.email}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-ink-600">
+                      {formatDate(o.createdAt, locale)}
+                    </td>
+                    <td className="px-4 py-3 text-end font-semibold">
+                      {formatCurrency(o.total, locale)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={o.status}
+                        onChange={(e) =>
+                          setStatus(o.id, e.target.value as OrderStatus)
+                        }
+                        className={cn(
+                          "h-8 rounded-lg border-0 px-2 text-xs font-medium",
+                          STATUS_TONE[o.status]
+                        )}
+                      >
+                        {STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {label(s)}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 text-end">
+                      <button
+                        onClick={() =>
+                          setExpanded(expanded === o.id ? null : o.id)
+                        }
+                        className="grid h-8 w-8 place-items-center rounded-lg text-ink-600 hover:bg-ink-100"
+                        aria-label="Expand"
+                      >
+                        <Icon
+                          name={expanded === o.id ? "ChevronLeft" : "ChevronRight"}
+                          size={16}
+                        />
+                      </button>
+                    </td>
+                  </tr>
+                  {expanded === o.id && (
+                    <tr className="bg-ink-50/50">
+                      <td colSpan={6} className="px-4 py-4">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div>
+                            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-500">
+                              Shipping
+                            </h4>
+                            <p className="text-sm">{o.customer.address}</p>
+                            <p className="text-sm text-ink-600">{o.customer.phone}</p>
+                          </div>
+                          <div>
+                            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-500">
+                              Items
+                            </h4>
+                            <ul className="text-sm">
+                              {o.items.map((it) => (
+                                <li
+                                  key={it.productId}
+                                  className="flex justify-between"
+                                >
+                                  <span>
+                                    {it.name} × {it.quantity}
+                                  </span>
+                                  <span className="font-medium">
+                                    {formatCurrency(it.price * it.quantity, locale)}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-ink-400">
+                    No orders.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </AdminShell>
+  );
+}
+
+function label(s: OrderStatus) {
+  return s[0].toUpperCase() + s.slice(1);
+}
+
+function Chip({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1.5 text-xs font-medium transition",
+        active
+          ? "border-ink-900 bg-ink-900 text-white"
+          : "border-ink-200 bg-white text-ink-700 hover:border-ink-300"
+      )}
+    >
+      {label}
+    </button>
+  );
+}

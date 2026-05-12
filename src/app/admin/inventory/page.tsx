@@ -1,0 +1,423 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { AdminShell } from "@/components/admin/AdminShell";
+import { Icon } from "@/components/ui/Icon";
+import { categories } from "@/lib/db";
+import { formatCurrency } from "@/lib/format";
+import { useI18n } from "@/lib/useI18n";
+import type { Product } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+interface DraftProduct {
+  id?: string;
+  sku: string;
+  nameEn: string;
+  nameAr: string;
+  nameFr: string;
+  descEn: string;
+  descAr: string;
+  descFr: string;
+  price: number;
+  categoryId: string;
+  stock: number;
+  image: string;
+}
+
+const EMPTY_DRAFT: DraftProduct = {
+  sku: "",
+  nameEn: "",
+  nameAr: "",
+  nameFr: "",
+  descEn: "",
+  descAr: "",
+  descFr: "",
+  price: 0,
+  categoryId: categories[0]?.id ?? "",
+  stock: 0,
+  image: "",
+};
+
+export default function InventoryPage() {
+  const { t, locale } = useI18n();
+  const [list, setList] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState<DraftProduct | null>(null);
+
+  async function load() {
+    setLoading(true);
+    const res = await fetch("/api/products", { cache: "no-store" });
+    const json = await res.json();
+    setList(json.data);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    if (!q) return list;
+    return list.filter((p) =>
+      [p.sku, p.name.en, p.name.ar, p.name.fr].join(" ").toLowerCase().includes(q)
+    );
+  }, [list, query]);
+
+  function toDraft(p: Product): DraftProduct {
+    return {
+      id: p.id,
+      sku: p.sku,
+      nameEn: p.name.en,
+      nameAr: p.name.ar,
+      nameFr: p.name.fr,
+      descEn: p.description.en,
+      descAr: p.description.ar,
+      descFr: p.description.fr,
+      price: p.price,
+      categoryId: p.categoryId,
+      stock: p.stock,
+      image: p.image,
+    };
+  }
+
+  async function save(d: DraftProduct) {
+    const payload = {
+      sku: d.sku,
+      name: { en: d.nameEn, ar: d.nameAr, fr: d.nameFr },
+      description: { en: d.descEn, ar: d.descAr, fr: d.descFr },
+      price: Number(d.price),
+      categoryId: d.categoryId,
+      stock: Number(d.stock),
+      image: d.image || "https://picsum.photos/seed/nova/800/800",
+    };
+    if (d.id) {
+      await fetch(`/api/products/${d.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+    setEditing(null);
+    await load();
+  }
+
+  async function remove(id: string) {
+    if (!confirm("Delete this product?")) return;
+    await fetch(`/api/products/${id}`, { method: "DELETE" });
+    await load();
+  }
+
+  return (
+    <AdminShell>
+      <div className="space-y-6">
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {t("admin.inventory")}
+            </h1>
+            <p className="text-sm text-ink-500">
+              Manage your product catalog, stock and pricing.
+            </p>
+          </div>
+          <button
+            onClick={() => setEditing({ ...EMPTY_DRAFT })}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-ink-900 px-4 text-sm font-medium text-white hover:bg-ink-800"
+          >
+            <Icon name="Plus" size={16} />
+            New product
+          </button>
+        </header>
+
+        <div className="relative">
+          <span className="pointer-events-none absolute inset-y-0 start-3 grid place-items-center text-ink-400">
+            <Icon name="Search" size={16} />
+          </span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by SKU or name…"
+            className="h-11 w-full rounded-xl border border-ink-200 bg-white ps-10 pe-4 text-sm focus:border-ink-900 focus:outline-none"
+          />
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-soft">
+          <table className="min-w-full text-sm">
+            <thead className="bg-ink-50 text-ink-600">
+              <tr>
+                <th className="px-4 py-3 text-start font-medium">Product</th>
+                <th className="px-4 py-3 text-start font-medium">SKU</th>
+                <th className="px-4 py-3 text-start font-medium">Category</th>
+                <th className="px-4 py-3 text-end font-medium">Price</th>
+                <th className="px-4 py-3 text-end font-medium">Stock</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-100">
+              {loading && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-ink-400">
+                    Loading…
+                  </td>
+                </tr>
+              )}
+              {!loading && filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-ink-400">
+                    No products.
+                  </td>
+                </tr>
+              )}
+              {filtered.map((p) => {
+                const cat = categories.find((c) => c.id === p.categoryId);
+                return (
+                  <tr key={p.id} className="hover:bg-ink-50/50">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={p.image}
+                          alt=""
+                          className="h-10 w-10 rounded-lg object-cover"
+                        />
+                        <span className="font-medium">{p.name[locale]}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-ink-600">{p.sku}</td>
+                    <td className="px-4 py-3 text-ink-600">
+                      {cat?.name[locale] ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-end">
+                      {formatCurrency(p.price, locale)}
+                    </td>
+                    <td className="px-4 py-3 text-end">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                          p.stock <= 10
+                            ? "bg-red-50 text-red-700"
+                            : p.stock <= 25
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-emerald-50 text-emerald-700"
+                        )}
+                      >
+                        {p.stock}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-end">
+                      <div className="inline-flex gap-1">
+                        <button
+                          onClick={() => setEditing(toDraft(p))}
+                          className="grid h-8 w-8 place-items-center rounded-lg text-ink-600 hover:bg-ink-100"
+                          aria-label="Edit"
+                        >
+                          <Icon name="Edit" size={16} />
+                        </button>
+                        <button
+                          onClick={() => remove(p.id)}
+                          className="grid h-8 w-8 place-items-center rounded-lg text-ink-600 hover:bg-red-50 hover:text-red-600"
+                          aria-label="Delete"
+                        >
+                          <Icon name="Trash2" size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {editing && (
+        <ProductEditor
+          draft={editing}
+          onClose={() => setEditing(null)}
+          onSave={save}
+        />
+      )}
+    </AdminShell>
+  );
+}
+
+function ProductEditor({
+  draft,
+  onClose,
+  onSave,
+}: {
+  draft: DraftProduct;
+  onClose: () => void;
+  onSave: (d: DraftProduct) => Promise<void>;
+}) {
+  const [d, setD] = useState<DraftProduct>(draft);
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    setSaving(true);
+    try {
+      await onSave(d);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4 animate-fade-in">
+      <div className="absolute inset-0 bg-ink-950/40" onClick={onClose} />
+      <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-lift">
+        <header className="flex items-center justify-between border-b border-ink-100 p-4">
+          <h3 className="text-base font-semibold">
+            {d.id ? "Edit product" : "New product"}
+          </h3>
+          <button
+            onClick={onClose}
+            className="grid h-9 w-9 place-items-center rounded-full text-ink-600 hover:bg-ink-100"
+            aria-label="Close"
+          >
+            <Icon name="X" size={18} />
+          </button>
+        </header>
+        <div className="max-h-[70vh] overflow-y-auto p-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <L label="SKU">
+              <input
+                value={d.sku}
+                onChange={(e) => setD({ ...d, sku: e.target.value })}
+                className={inputCls}
+              />
+            </L>
+            <L label="Category">
+              <select
+                value={d.categoryId}
+                onChange={(e) => setD({ ...d, categoryId: e.target.value })}
+                className={inputCls}
+              >
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name.en}
+                  </option>
+                ))}
+              </select>
+            </L>
+            <L label="Price (USD)">
+              <input
+                type="number"
+                step="0.01"
+                value={d.price}
+                onChange={(e) => setD({ ...d, price: Number(e.target.value) })}
+                className={inputCls}
+              />
+            </L>
+            <L label="Stock">
+              <input
+                type="number"
+                value={d.stock}
+                onChange={(e) => setD({ ...d, stock: Number(e.target.value) })}
+                className={inputCls}
+              />
+            </L>
+            <L label="Image URL" wide>
+              <input
+                value={d.image}
+                onChange={(e) => setD({ ...d, image: e.target.value })}
+                className={inputCls}
+                placeholder="https://…"
+              />
+            </L>
+            <L label="Name (EN)">
+              <input
+                value={d.nameEn}
+                onChange={(e) => setD({ ...d, nameEn: e.target.value })}
+                className={inputCls}
+              />
+            </L>
+            <L label="Name (AR)">
+              <input
+                value={d.nameAr}
+                onChange={(e) => setD({ ...d, nameAr: e.target.value })}
+                className={inputCls}
+                dir="rtl"
+              />
+            </L>
+            <L label="Name (FR)" wide>
+              <input
+                value={d.nameFr}
+                onChange={(e) => setD({ ...d, nameFr: e.target.value })}
+                className={inputCls}
+              />
+            </L>
+            <L label="Description (EN)" wide>
+              <textarea
+                value={d.descEn}
+                onChange={(e) => setD({ ...d, descEn: e.target.value })}
+                rows={2}
+                className={inputCls}
+              />
+            </L>
+            <L label="Description (AR)" wide>
+              <textarea
+                value={d.descAr}
+                onChange={(e) => setD({ ...d, descAr: e.target.value })}
+                rows={2}
+                className={inputCls}
+                dir="rtl"
+              />
+            </L>
+            <L label="Description (FR)" wide>
+              <textarea
+                value={d.descFr}
+                onChange={(e) => setD({ ...d, descFr: e.target.value })}
+                rows={2}
+                className={inputCls}
+              />
+            </L>
+          </div>
+        </div>
+        <footer className="flex items-center justify-end gap-2 border-t border-ink-100 p-4">
+          <button
+            onClick={onClose}
+            className="h-10 rounded-xl border border-ink-200 bg-white px-4 text-sm font-medium text-ink-700 hover:border-ink-300"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={saving}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-ink-900 px-4 text-sm font-medium text-white hover:bg-ink-800 disabled:opacity-60"
+          >
+            <Icon name="Save" size={16} />
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+const inputCls =
+  "h-10 w-full rounded-xl border border-ink-200 bg-white px-3 text-sm focus:border-ink-900 focus:outline-none";
+
+function L({
+  label,
+  wide,
+  children,
+}: {
+  label: string;
+  wide?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={cn("block", wide && "md:col-span-2")}>
+      <span className="mb-1 block text-xs font-medium text-ink-600">{label}</span>
+      {children}
+    </label>
+  );
+}
