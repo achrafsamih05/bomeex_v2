@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import {
   createSessionToken,
   hashPassword,
@@ -7,55 +7,56 @@ import {
 } from "@/lib/server/auth";
 import { createUser, getUserByEmail } from "@/lib/server/db";
 import { emit } from "@/lib/server/bus";
+import { handle, httpError } from "@/lib/server/http";
 import type { User } from "@/lib/types";
 
-// POST /api/auth/register  — customers only; admin accounts are seeded.
-export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null);
-  if (!body || typeof body !== "object") {
-    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
-  }
-  const { email, password, name, phone, address, city, postalCode, country } =
-    body as Record<string, string>;
+// POST /api/auth/register — customers only; admin accounts are seeded.
+export const POST = (req: NextRequest) =>
+  handle(async () => {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") httpError(400, "Invalid body");
 
-  if (!email || !password || !name || !address) {
-    return NextResponse.json(
-      { error: "email, password, name and address are required" },
-      { status: 400 }
-    );
-  }
-  if (password.length < 8) {
-    return NextResponse.json(
-      { error: "Password must be at least 8 characters" },
-      { status: 400 }
-    );
-  }
+    const {
+      email,
+      password,
+      name,
+      phone,
+      address,
+      city,
+      postalCode,
+      country,
+    } = body as Record<string, string>;
 
-  const existing = await getUserByEmail(email);
-  if (existing) {
-    return NextResponse.json({ error: "Email already registered" }, { status: 409 });
-  }
+    if (!email || !password || !name || !address) {
+      httpError(400, "email, password, name and address are required");
+    }
+    if (password.length < 8) {
+      httpError(400, "Password must be at least 8 characters");
+    }
 
-  const user: User = {
-    id: `u-${Date.now().toString(36)}`,
-    email: email.toLowerCase().trim(),
-    name,
-    role: "customer",
-    phone,
-    address,
-    city,
-    postalCode,
-    country,
-    banned: false,
-    passwordHash: hashPassword(password),
-    createdAt: new Date().toISOString(),
-    lastSeenAt: new Date().toISOString(),
-  };
-  await createUser(user);
-  emit({ channel: "users", action: "created", id: user.id });
+    const existing = await getUserByEmail(email);
+    if (existing) httpError(409, "Email already registered");
 
-  const token = createSessionToken(user);
-  setSessionCookie(token);
+    const user: User = {
+      id: `u-${Date.now().toString(36)}`,
+      email: email.toLowerCase().trim(),
+      name,
+      role: "customer",
+      phone,
+      address,
+      city,
+      postalCode,
+      country,
+      banned: false,
+      passwordHash: hashPassword(password),
+      createdAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
+    };
+    await createUser(user);
+    emit({ channel: "users", action: "created", id: user.id });
 
-  return NextResponse.json({ data: toPublicUser(user) }, { status: 201 });
-}
+    const token = createSessionToken(user);
+    setSessionCookie(token);
+
+    return toPublicUser(user);
+  });
