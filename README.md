@@ -1,102 +1,82 @@
 # Nova — Modern E-commerce
 
-A production-grade e-commerce reference built with **Next.js 14 (App Router)**, **TypeScript**, **Tailwind CSS**, and **Zustand**.
-It ships a multilingual storefront (EN / AR / FR with full RTL) and a complete admin dashboard — all wired to a small, swappable server layer.
+A production-grade e-commerce reference built with **Next.js 14 (App Router)**, **TypeScript**, **Tailwind CSS**, and **Zustand**. Multilingual storefront (EN / AR / FR with RTL) + full admin dashboard + real authentication, real analytics, and real-time sync.
 
-## Highlights
+## What's inside
 
 - **Storefront**
-  - Floating glass toolbar, floating cart button, mobile bottom nav
-  - Instant category chips and live search (URL-synced)
+  - Floating glass toolbar, language switcher, floating cart FAB, mobile bottom nav
+  - Instant category chips and live URL-synced search
   - Side-drawer cart (no page reloads) with quantity controls
-  - Checkout flow that creates an order and an invoice in one call
-  - Full RTL: `<html dir>` and logical CSS (`start`/`end`) flip automatically
+  - **One-click checkout** for logged-in users using their saved shipping profile
+  - Storefront prices/name update instantly when the admin changes them
+- **Auth / authorization**
+  - Customer sign-in at `/login` and **separate admin sign-in at `/login/admin`**
+  - Edge middleware gates `/admin/*` and admin APIs on role
+  - scrypt password hashing + HMAC-signed session cookies (Web-Crypto compatible for middleware)
+  - Banned accounts are rejected on next request
 - **Admin**
-  - Dashboard with revenue, orders, low-stock and top products
-  - Inventory CRUD with a multilingual product editor
-  - Orders with inline status updates and expandable details
-  - Invoices with paid/unpaid toggle and print-ready modal
-  - Profile, currency, tax and language settings
-- **Architecture**
-  - Modular components (`src/components/{ui,storefront,admin}`)
-  - Clean domain types in `src/lib/types.ts`
-  - Zustand store (persisted) for cart and locale
-  - REST-style API routes at `/api/*` ready to swap for Supabase/Postgres/Firebase
+  - **Real analytics** — revenue (paid invoices), orders, active users, stock alerts, 14-day revenue chart, top products, status breakdown
+  - Inventory CRUD with multilingual product editor
+  - Orders with inline status updates and expandable detail
+  - Invoices with paid/unpaid toggle + printable modal
+  - **Users page** with ban/unban and delete
+  - **Global Settings** — store name, currency, tax rate, low-stock threshold — applied site-wide
+- **Realtime**
+  - In-process event bus → `/api/events` Server-Sent Events stream
+  - Client hooks subscribe once and auto-refetch; every admin mutation is visible on every open tab
 
-## Getting started
+## Running
 
 ```bash
 npm install
-npm run dev
+npm run dev        # storefront http://localhost:3000 · admin http://localhost:3000/admin
 ```
 
-Then open http://localhost:3000 (storefront) and http://localhost:3000/admin (admin).
+**Seed accounts** (change immediately):
+- Admin: `admin@nova.shop` / `admin1234`
+- Customer: `demo@nova.shop` / `demo1234`
 
-Scripts:
+**Environment variables**
+- `NEXTAUTH_SECRET` — HMAC key for session cookies. A dev fallback is used if unset; **set this in production**.
 
-- `npm run dev` — start the dev server
-- `npm run build` — production build
-- `npm run start` — run the production build
-- `npm run lint` — lint
-- `npm run typecheck` — TypeScript check
+Scripts: `dev`, `build`, `start`, `lint`, `typecheck`.
 
 ## Project structure
 
 ```
 src/
   app/
-    layout.tsx              # Root HTML shell
-    page.tsx                # Storefront home
-    cart/                   # Redirects and opens the cart drawer
-    categories/             # Category index
-    checkout/               # Checkout form + summary
-    account/                # Customer account & prefs
+    layout.tsx · page.tsx · categories/ · cart/ · checkout/ · account/
+    login/  login/admin/  register/                -- auth flows
     admin/
-      page.tsx              # Dashboard
-      inventory/            # Products CRUD
-      orders/               # Orders list + status updates
-      invoices/             # Invoices + print modal
-      settings/             # Admin settings
+      page.tsx  inventory/  orders/  invoices/  users/  settings/
     api/
-      products/             # GET, POST, [id] GET/PATCH/DELETE
-      categories/           # GET
-      orders/               # GET, POST, [id] GET/PATCH
-      invoices/             # GET, [id] GET/PATCH
-      analytics/            # GET summary
+      auth/{login, logout, register, me}/          -- session + profile
+      products/[id]  categories  orders/[id]  invoices/[id]
+      users/[id]  settings  analytics  events      -- SSE realtime
   components/
-    ui/                     # Button, Icon (lucide registry)
-    storefront/             # Toolbar, LanguageSwitcher, CartDrawer, etc.
-    admin/                  # AdminShell
+    ui/{Button, Icon}
+    auth/AuthLayout
+    storefront/{Toolbar, UserMenu, CartDrawer, ...}
+    admin/AdminShell
   lib/
-    db.ts                   # In-memory seed data (swap for real DB)
-    i18n.ts                 # Dictionary + direction helpers
-    useI18n.ts              # React hook — syncs <html dir/lang>
-    store/
-      cart.ts               # Cart (Zustand, persisted)
-      locale.ts             # Active locale
-    types.ts                # Domain types
-    format.ts               # Intl formatters
-    utils.ts                # cn() helper
+    server/{db, auth, bus}.ts                      -- server-only
+    client/{api, hooks, realtime}.ts               -- client-only
+    store/{cart, locale}.ts                        -- Zustand
+    types.ts  i18n.ts  useI18n.ts  format.ts  utils.ts
+  middleware.ts                                    -- Edge: /admin/* gate
 ```
 
-## Tech stack
+## Key design notes
 
-- **Framework:** Next.js 14 App Router with TypeScript
-- **Styling:** Tailwind CSS with a custom `ink` / `brand` palette, logical CSS utilities
-- **State:** Zustand with `persist` for the cart + locale
-- **Icons:** lucide-react
-- **i18n:** tiny in-house dictionary + `useI18n` hook
-- **API:** Next.js route handlers (easy to replace with Supabase/Firebase)
+- **Persistence** is file-backed JSON in dev (`.nova-db.json`) via an async API that mirrors a real DB client — replace `src/lib/server/db.ts` with a Supabase / Postgres / Firebase driver and nothing else changes.
+- **Realtime** uses an in-process `EventEmitter` → SSE. To scale horizontally, swap for Redis pub/sub, Postgres `LISTEN/NOTIFY`, or Supabase Realtime; the client contract (`/api/events`) stays the same.
+- **Authorization** is layered: Edge middleware for page/routes that never need per-method logic, and `getCurrentUser()` checks inside routes (orders, invoices, settings) for fine-grained rules.
+- **RTL** is done via logical CSS (`start-*`/`end-*`, `ps-*`/`pe-*`). `useI18n` syncs `<html dir/lang>`; the cart drawer mirrors its slide direction automatically.
 
-## Internationalization & RTL
+## Docs
 
-- Locales: `en`, `ar`, `fr`
-- `useI18n` syncs `<html lang>` and `<html dir>` automatically
-- All layouts use `start-*` / `end-*`, `ps-*` / `pe-*` so they mirror for Arabic without extra CSS
-- Number and date formatting go through `Intl` (see `src/lib/format.ts`)
-
-## API, DB schema, and deployment
-
-- **API endpoints:** see [`docs/API_ENDPOINTS.md`](./docs/API_ENDPOINTS.md)
-- **Database schema:** see [`docs/DATABASE_SCHEMA.md`](./docs/DATABASE_SCHEMA.md)
-- **Swapping the data source:** replace `src/lib/db.ts` with a thin client for your chosen provider (Supabase, Prisma + Postgres, Firestore). The route handlers already expect that shape.
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — component/state map
+- [`docs/API_ENDPOINTS.md`](./docs/API_ENDPOINTS.md) — every endpoint with auth rules
+- [`docs/DATABASE_SCHEMA.md`](./docs/DATABASE_SCHEMA.md) — full SQL schema ready for Supabase/Postgres

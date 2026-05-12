@@ -6,5 +6,6 @@ dist
 .env.local
 .DS_Store
 *.log
-
 tsconfig.tsbuildinfo
+.nova-db.json
+.nova-db.json.tmp

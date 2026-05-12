@@ -1,11 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Icon } from "@/components/ui/Icon";
+import { apiSend } from "@/lib/client/api";
+import { useOrders, useSettings } from "@/lib/client/hooks";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useI18n } from "@/lib/useI18n";
-import type { Order, OrderStatus } from "@/lib/types";
+import type { OrderStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const STATUSES: OrderStatus[] = [
@@ -26,27 +28,15 @@ const STATUS_TONE: Record<OrderStatus, string> = {
 
 export default function OrdersAdminPage() {
   const { t, locale } = useI18n();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const { data: orders, reload } = useOrders();
+  const settings = useSettings();
+  const currency = settings?.currency ?? "USD";
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  async function load() {
-    const res = await fetch("/api/orders", { cache: "no-store" });
-    const json = await res.json();
-    setOrders(json.data);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
   async function setStatus(id: string, status: OrderStatus) {
-    await fetch(`/api/orders/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    await load();
+    await apiSend(`/api/orders/${id}`, "PATCH", { status });
+    await reload();
   }
 
   const filtered = orders.filter(
@@ -61,7 +51,7 @@ export default function OrdersAdminPage() {
             {t("admin.orders")}
           </h1>
           <p className="text-sm text-ink-500">
-            Track and update the status of every order.
+            Track and update every order in real time.
           </p>
         </header>
 
@@ -111,7 +101,7 @@ export default function OrdersAdminPage() {
                       {formatDate(o.createdAt, locale)}
                     </td>
                     <td className="px-4 py-3 text-end font-semibold">
-                      {formatCurrency(o.total, locale)}
+                      {formatCurrency(o.total, locale, currency)}
                     </td>
                     <td className="px-4 py-3">
                       <select
@@ -155,7 +145,9 @@ export default function OrdersAdminPage() {
                               Shipping
                             </h4>
                             <p className="text-sm">{o.customer.address}</p>
-                            <p className="text-sm text-ink-600">{o.customer.phone}</p>
+                            <p className="text-sm text-ink-600">
+                              {o.customer.phone}
+                            </p>
                           </div>
                           <div>
                             <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-500">
@@ -171,7 +163,11 @@ export default function OrdersAdminPage() {
                                     {it.name} × {it.quantity}
                                   </span>
                                   <span className="font-medium">
-                                    {formatCurrency(it.price * it.quantity, locale)}
+                                    {formatCurrency(
+                                      it.price * it.quantity,
+                                      locale,
+                                      currency
+                                    )}
                                   </span>
                                 </li>
                               ))}

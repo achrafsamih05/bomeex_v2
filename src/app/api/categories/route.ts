@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { categories } from "@/lib/db";
+import { listCategories } from "@/lib/server/db";
 
-// GET /api/categories
+// GET /api/categories — public
 export async function GET() {
-  return NextResponse.json({ data: categories });
+  return NextResponse.json({ data: await listCategories() });
 }
