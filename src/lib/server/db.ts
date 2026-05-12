@@ -1,12 +1,19 @@
 import "server-only";
-import { getSupabase, getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin } from "./supabase";
 import {
+  CATEGORY_COLUMNS,
   CategoryRow,
+  INVOICE_COLUMNS,
   InvoiceRow,
+  ORDER_COLUMNS,
+  ORDER_ITEM_COLUMNS,
   OrderItemRow,
   OrderRow,
+  PRODUCT_COLUMNS,
   ProductRow,
+  SETTINGS_COLUMNS,
   SettingsRow,
+  USER_COLUMNS,
   UserRow,
   categoryFromRow,
   invoiceFromRow,
@@ -28,36 +35,44 @@ import type {
 } from "../types";
 
 // ---------------------------------------------------------------------------
-// Supabase-backed DB. No file system writes — works on Vercel's read-only FS.
+// Supabase-backed DB. Every server route reaches the database through this
+// module — the export surface (listProducts, createProduct, …) is stable so
+// route handlers never change when the underlying storage changes.
 //
-// The export surface intentionally matches the previous JSON-backed module
-// (listProducts, getProduct, createProduct, …, nextProductId, etc.), so the
-// route handlers in src/app/api/**/route.ts are unchanged.
+// Auditing notes (A-Z review, May 2026):
+//   - Every call uses the service-role client. Our own auth layer
+//     (src/middleware.ts + getCurrentUser) is the single source of truth for
+//     authorization. Routing reads through anon would cause RLS to silently
+//     filter rows to [] — the exact "empty UI while DB has data" bug.
+//   - SELECTs enumerate every multilingual column explicitly
+//     (name_en, name_ar, name_fr, description_en, description_ar,
+//     description_fr). If a column is renamed or missing, PostgREST returns
+//     error code 42703 with the column name — loud, not silent.
+//   - raise() logs the full Supabase error (code + message + details + hint)
+//     and an empty-result hint fires when a listX() returns 0 rows, so the
+//     operator can tell a "no policy" silent empty apart from a legitimate
+//     "nothing seeded yet" empty.
 // ---------------------------------------------------------------------------
 
-// Public reads can use the anon client (RLS-friendly); mutations and admin
-// reads use the service-role client so our own auth/authorization logic stays
-// the single source of truth.
-const read = () => getSupabase();
-const write = () => getSupabaseAdmin();
+const sb = () => getSupabaseAdmin();
 
 /**
- * Log the full Supabase error (with code/hint/details) to Vercel logs, then
- * throw an Error whose `.message` carries the real cause. Our API routes wrap
- * handlers in `handle()` (src/lib/server/http.ts), which turns thrown errors
- * into clean `{ error: "..." }` JSON responses — so the browser never sees
- * an HTML crash page while we still get full detail server-side.
+ * Log the full Supabase error (with code/hint/details) to server logs, then
+ * throw an Error whose `.message` carries the real cause. Our API routes
+ * wrap handlers in `handle()` (src/lib/server/http.ts), which turns thrown
+ * errors into clean `{ error: "..." }` JSON responses — so the browser never
+ * sees an HTML crash page while we still get full detail server-side.
  */
 function raise(op: string, err: unknown): never {
   // eslint-disable-next-line no-console
-  console.error(`[db] ${op} failed:`, err);
+  console.error(`[db] ${op} failed — Supabase returned:`, err);
   const e = err as {
     message?: string;
     code?: string;
     details?: string;
     hint?: string;
   } | null;
-  const parts = [op, "failed"];
+  const parts = [`${op} failed`];
   if (e?.message) parts.push(`— ${e.message}`);
   if (e?.code) parts.push(`(code ${e.code})`);
   if (e?.details) parts.push(`· ${e.details}`);
@@ -65,38 +80,58 @@ function raise(op: string, err: unknown): never {
   throw new Error(parts.join(" "));
 }
 
-// ---------- Products ----------
+/**
+ * Warn once per cold start when a list query returns zero rows. A truly empty
+ * table is fine, but when this lines up with an RLS-misconfigured project
+ * (see src/lib/server/supabase.ts), the extra log line tells the operator
+ * EXACTLY what Supabase returned instead of leaving them to guess.
+ */
+function warnIfEmpty(op: string, rows: unknown[]) {
+  if (!Array.isArray(rows) || rows.length > 0) return;
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[db] ${op} returned 0 rows. If you expect data, verify:\n` +
+      `  - SUPABASE_URL points at the right project\n` +
+      `  - SUPABASE_SERVICE_ROLE_KEY is set (not just SUPABASE_ANON_KEY)\n` +
+      `  - the table was seeded (npm run seed)\n` +
+      `  - RLS policies on the table allow this client to read`
+  );
+}
+
+// ---------- Products -------------------------------------------------------
 
 export async function listProducts(): Promise<Product[]> {
-  const { data, error } = await read()
+  const { data, error } = await sb()
     .from("products")
-    .select("*")
+    .select(PRODUCT_COLUMNS)
     .order("created_at", { ascending: false });
   if (error) raise("listProducts", error);
-  return (data as ProductRow[]).map(productFromRow);
+  const rows = (data ?? []) as unknown as ProductRow[];
+  warnIfEmpty("listProducts", rows);
+  return rows.map(productFromRow);
 }
 
 export async function getProduct(id: string): Promise<Product | null> {
-  const { data, error } = await read()
+  const { data, error } = await sb()
     .from("products")
-    .select("*")
+    .select(PRODUCT_COLUMNS)
     .eq("id", id)
     .maybeSingle();
   if (error) raise("getProduct", error);
-  return data ? productFromRow(data as ProductRow) : null;
+  return data ? productFromRow(data as unknown as ProductRow) : null;
 }
 
 export async function createProduct(p: Product): Promise<Product> {
   // .select().single() returns the persisted row, so the API replies with
   // what the DB actually stored (and schema errors surface loudly via
   // raise() instead of silently producing a half-written row).
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("products")
     .insert(productToRow(p))
-    .select()
+    .select(PRODUCT_COLUMNS)
     .single();
   if (error) raise("createProduct", error);
-  return productFromRow(data as ProductRow);
+  return productFromRow(data as unknown as ProductRow);
 }
 
 /**
@@ -110,96 +145,96 @@ export async function updateProduct(
   patch: Partial<Product>
 ): Promise<Product | null> {
   const row = productToRow(patch);
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("products")
     .update(row)
     .eq("id", id)
-    .select()
+    .select(PRODUCT_COLUMNS)
     .maybeSingle();
   if (error) raise("updateProduct", error);
-  return data ? productFromRow(data as ProductRow) : null;
+  return data ? productFromRow(data as unknown as ProductRow) : null;
 }
 
 export async function deleteProduct(id: string): Promise<Product | null> {
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("products")
     .delete()
     .eq("id", id)
-    .select()
+    .select(PRODUCT_COLUMNS)
     .maybeSingle();
   if (error) raise("deleteProduct", error);
-  return data ? productFromRow(data as ProductRow) : null;
+  return data ? productFromRow(data as unknown as ProductRow) : null;
 }
 
 /**
- * Generates a new product id. We no longer rely on a counters table — we
- * just count existing rows and pad. Good enough for demo data; for real
- * production either let Postgres `default uuid_generate_v4()` handle it or
- * use a dedicated sequence.
+ * Generates a new product id. We count existing rows and pad — good enough
+ * for demo data. In real production either let Postgres generate a uuid via
+ * `default uuid_generate_v4()` or use a dedicated sequence.
  */
 export async function nextProductId(): Promise<string> {
-  const { count, error } = await write()
+  const { count, error } = await sb()
     .from("products")
-    .select("*", { count: "exact", head: true });
+    .select("id", { count: "exact", head: true });
   if (error) raise("nextProductId", error);
   const n = (count ?? 0) + 1;
   return `p-${String(n).padStart(3, "0")}`;
 }
 
-// ---------- Categories ----------
+// ---------- Categories -----------------------------------------------------
 
 export async function listCategories(): Promise<Category[]> {
-  const { data, error } = await read()
+  const { data, error } = await sb()
     .from("categories")
-    .select("*")
+    .select(CATEGORY_COLUMNS)
     .order("slug");
   if (error) raise("listCategories", error);
-  return (data as CategoryRow[]).map(categoryFromRow);
+  const rows = (data ?? []) as unknown as CategoryRow[];
+  warnIfEmpty("listCategories", rows);
+  return rows.map(categoryFromRow);
 }
 
-// ---------- Orders ----------
+// ---------- Orders ---------------------------------------------------------
 
 async function loadAllOrderItems(orderIds: string[]): Promise<OrderItemRow[]> {
   if (orderIds.length === 0) return [];
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("order_items")
-    .select("*")
+    .select(ORDER_ITEM_COLUMNS)
     .in("order_id", orderIds);
   if (error) raise("loadAllOrderItems", error);
-  return (data ?? []) as OrderItemRow[];
+  return (data ?? []) as unknown as OrderItemRow[];
 }
 
 export async function listOrders(): Promise<Order[]> {
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("orders")
-    .select("*")
+    .select(ORDER_COLUMNS)
     .order("created_at", { ascending: false });
   if (error) raise("listOrders", error);
-  const rows = (data ?? []) as OrderRow[];
+  const rows = (data ?? []) as unknown as OrderRow[];
   const items = await loadAllOrderItems(rows.map((r) => r.id));
   return rows.map((r) => orderFromRow(r, items));
 }
 
 export async function getOrder(id: string): Promise<Order | null> {
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("orders")
-    .select("*")
+    .select(ORDER_COLUMNS)
     .eq("id", id)
     .maybeSingle();
   if (error) raise("getOrder", error);
   if (!data) return null;
   const items = await loadAllOrderItems([id]);
-  return orderFromRow(data as OrderRow, items);
+  return orderFromRow(data as unknown as OrderRow, items);
 }
 
 /**
- * Creates the order row AND its order_items in a two-step transaction-ish
- * sequence. If the items insert fails we roll the order row back. Supabase
- * doesn't expose true transactions over PostgREST — for a stronger guarantee
- * wrap this in a Postgres function and call it via `rpc("place_order", …)`.
+ * Creates the order row AND its order_items in a two-step sequence with
+ * best-effort rollback on the items insert. Supabase doesn't expose true
+ * transactions over PostgREST — for a stronger guarantee, wrap this in a
+ * Postgres function and call it via `rpc("place_order", …)`.
  */
 export async function createOrder(o: Order): Promise<void> {
-  const sb = write();
   const orderRow: Omit<OrderRow, "id"> & { id: string } = {
     id: o.id,
     user_id: o.userId ?? null,
@@ -214,7 +249,7 @@ export async function createOrder(o: Order): Promise<void> {
     created_at: o.createdAt,
   };
 
-  const { error: orderErr } = await sb.from("orders").insert(orderRow);
+  const { error: orderErr } = await sb().from("orders").insert(orderRow);
   if (orderErr) raise("createOrder (orders insert)", orderErr);
 
   if (o.items.length > 0) {
@@ -225,10 +260,10 @@ export async function createOrder(o: Order): Promise<void> {
       quantity: i.quantity,
       price: i.price,
     }));
-    const { error: itemsErr } = await sb.from("order_items").insert(itemRows);
+    const { error: itemsErr } = await sb().from("order_items").insert(itemRows);
     if (itemsErr) {
       // Best-effort rollback so we don't leave a dangling empty order.
-      await sb.from("orders").delete().eq("id", o.id);
+      await sb().from("orders").delete().eq("id", o.id);
       raise("createOrder (order_items insert)", itemsErr);
     }
   }
@@ -248,50 +283,50 @@ export async function updateOrder(
   }
   if (Object.keys(row).length === 0) return getOrder(id);
 
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("orders")
     .update(row)
     .eq("id", id)
-    .select()
+    .select(ORDER_COLUMNS)
     .maybeSingle();
   if (error) raise("updateOrder", error);
   if (!data) return null;
   const items = await loadAllOrderItems([id]);
-  return orderFromRow(data as OrderRow, items);
+  return orderFromRow(data as unknown as OrderRow, items);
 }
 
 export async function nextOrderId(): Promise<string> {
-  const { count, error } = await write()
+  const { count, error } = await sb()
     .from("orders")
-    .select("*", { count: "exact", head: true });
+    .select("id", { count: "exact", head: true });
   if (error) raise("nextOrderId", error);
   const n = 1000 + (count ?? 0) + 1;
   return `o-${n}`;
 }
 
-// ---------- Invoices ----------
+// ---------- Invoices -------------------------------------------------------
 
 export async function listInvoices(): Promise<Invoice[]> {
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("invoices")
-    .select("*")
+    .select(INVOICE_COLUMNS)
     .order("issued_at", { ascending: false });
   if (error) raise("listInvoices", error);
-  return ((data ?? []) as InvoiceRow[]).map(invoiceFromRow);
+  return ((data ?? []) as unknown as InvoiceRow[]).map(invoiceFromRow);
 }
 
 export async function getInvoice(id: string): Promise<Invoice | null> {
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("invoices")
-    .select("*")
+    .select(INVOICE_COLUMNS)
     .eq("id", id)
     .maybeSingle();
   if (error) raise("getInvoice", error);
-  return data ? invoiceFromRow(data as InvoiceRow) : null;
+  return data ? invoiceFromRow(data as unknown as InvoiceRow) : null;
 }
 
 export async function createInvoice(inv: Invoice): Promise<void> {
-  const { error } = await write().from("invoices").insert({
+  const { error } = await sb().from("invoices").insert({
     id: inv.id,
     order_id: inv.orderId,
     number: inv.number,
@@ -313,55 +348,55 @@ export async function updateInvoice(
   if (patch.dueAt !== undefined) row.due_at = patch.dueAt;
   if (patch.number !== undefined) row.number = patch.number;
 
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("invoices")
     .update(row)
     .eq("id", id)
-    .select()
+    .select(INVOICE_COLUMNS)
     .maybeSingle();
   if (error) raise("updateInvoice", error);
-  return data ? invoiceFromRow(data as InvoiceRow) : null;
+  return data ? invoiceFromRow(data as unknown as InvoiceRow) : null;
 }
 
 export async function nextInvoiceId(): Promise<string> {
-  const { count, error } = await write()
+  const { count, error } = await sb()
     .from("invoices")
-    .select("*", { count: "exact", head: true });
+    .select("id", { count: "exact", head: true });
   if (error) raise("nextInvoiceId", error);
   const n = 5000 + (count ?? 0) + 1;
   return `i-${n}`;
 }
 
-// ---------- Users ----------
+// ---------- Users ----------------------------------------------------------
 
 export async function listUsers(): Promise<User[]> {
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("users")
-    .select("*")
+    .select(USER_COLUMNS)
     .order("created_at", { ascending: false });
   if (error) raise("listUsers", error);
-  return ((data ?? []) as UserRow[]).map(userFromRow);
+  return ((data ?? []) as unknown as UserRow[]).map(userFromRow);
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("users")
-    .select("*")
+    .select(USER_COLUMNS)
     .eq("id", id)
     .maybeSingle();
   if (error) raise("getUserById", error);
-  return data ? userFromRow(data as UserRow) : null;
+  return data ? userFromRow(data as unknown as UserRow) : null;
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
   const e = email.toLowerCase().trim();
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("users")
-    .select("*")
+    .select(USER_COLUMNS)
     .ilike("email", e)
     .maybeSingle();
   if (error) raise("getUserByEmail", error);
-  return data ? userFromRow(data as UserRow) : null;
+  return data ? userFromRow(data as unknown as UserRow) : null;
 }
 
 export async function createUser(u: User): Promise<User> {
@@ -376,10 +411,6 @@ export async function createUser(u: User): Promise<User> {
   //   - The real column name for shipping fields is whatever the schema
   //     declares — we pass them only if the user supplied them and let the DB
   //     reject any that don't exist with a clear error (surfaced via raise()).
-  //
-  // Columns we assume exist on `users` (see supabase/schema.sql):
-  //   id, email, name, role, password_hash, plus optional
-  //   phone / address / city / postal_code / country.
   const required: Record<string, unknown> = {
     id: u.id,
     email: u.email,
@@ -400,17 +431,13 @@ export async function createUser(u: User): Promise<User> {
 
   const payload = { ...required, ...optional };
 
-  // .select().single() returns the persisted row — which is what we want the
-  // API to reply with, so the client sees exactly what the DB stored. That
-  // way schema drift (missing columns, RLS policy rejections, etc.) surfaces
-  // immediately as a real error instead of a silent no-op.
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("users")
     .insert(payload)
-    .select()
+    .select(USER_COLUMNS)
     .single();
   if (error) raise("createUser", error);
-  return userFromRow(data as UserRow);
+  return userFromRow(data as unknown as UserRow);
 }
 
 export async function updateUser(
@@ -418,37 +445,37 @@ export async function updateUser(
   patch: Partial<User>
 ): Promise<User | null> {
   const row = userToRow(patch);
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("users")
     .update(row)
     .eq("id", id)
-    .select()
+    .select(USER_COLUMNS)
     .maybeSingle();
   if (error) raise("updateUser", error);
-  return data ? userFromRow(data as UserRow) : null;
+  return data ? userFromRow(data as unknown as UserRow) : null;
 }
 
 export async function deleteUser(id: string): Promise<User | null> {
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("users")
     .delete()
     .eq("id", id)
-    .select()
+    .select(USER_COLUMNS)
     .maybeSingle();
   if (error) raise("deleteUser", error);
-  return data ? userFromRow(data as UserRow) : null;
+  return data ? userFromRow(data as unknown as UserRow) : null;
 }
 
-// ---------- Settings ----------
+// ---------- Settings -------------------------------------------------------
 //
 // The settings table is a single-row store keyed on `id = 1`.
 
 const SETTINGS_ID = 1;
 
 export async function getSettings(): Promise<Settings> {
-  const { data, error } = await read()
+  const { data, error } = await sb()
     .from("settings")
-    .select("*")
+    .select(SETTINGS_COLUMNS)
     .eq("id", SETTINGS_ID)
     .maybeSingle();
   if (error) raise("getSettings", error);
@@ -462,18 +489,18 @@ export async function getSettings(): Promise<Settings> {
       lowStockThreshold: 20,
     };
   }
-  return settingsFromRow(data as SettingsRow);
+  return settingsFromRow(data as unknown as SettingsRow);
 }
 
 export async function updateSettings(
   patch: Partial<Settings>
 ): Promise<Settings> {
   const row = settingsToRow(patch);
-  const { data, error } = await write()
+  const { data, error } = await sb()
     .from("settings")
     .update(row)
     .eq("id", SETTINGS_ID)
-    .select()
+    .select(SETTINGS_COLUMNS)
     .maybeSingle();
   if (error) raise("updateSettings", error);
   if (!data) {
@@ -486,9 +513,13 @@ export async function updateSettings(
       low_stock_threshold: 20,
       ...row,
     };
-    const upsert = await write().from("settings").upsert(defaults).select().single();
+    const upsert = await sb()
+      .from("settings")
+      .upsert(defaults)
+      .select(SETTINGS_COLUMNS)
+      .single();
     if (upsert.error) raise("updateSettings (upsert)", upsert.error);
-    return settingsFromRow(upsert.data as SettingsRow);
+    return settingsFromRow(upsert.data as unknown as SettingsRow);
   }
-  return settingsFromRow(data as SettingsRow);
+  return settingsFromRow(data as unknown as SettingsRow);
 }
