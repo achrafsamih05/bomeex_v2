@@ -124,5 +124,19 @@ export const POST = (req: NextRequest) =>
     }
 
     const { data: pub } = sb.storage.from(BUCKET).getPublicUrl(key);
-    return { url: pub.publicUrl, path: key };
+    const url = pub.publicUrl;
+
+    // Defensive sanity check: getPublicUrl() should always return an absolute
+    // https:// URL. If it doesn't, persisting the result would cause the
+    // "broken icon everywhere" bug because the DB would hold a path fragment.
+    // Log loudly so the failure is traceable server-side.
+    if (!/^https?:\/\//i.test(url)) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[upload] getPublicUrl() returned a non-absolute URL "${url}" for key ${key}. ` +
+          "Storefront images will break. Check SUPABASE_URL and bucket visibility."
+      );
+    }
+
+    return { url, path: key };
   });
