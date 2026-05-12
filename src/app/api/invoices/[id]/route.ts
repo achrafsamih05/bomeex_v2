@@ -1,34 +1,33 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getInvoice, updateInvoice } from "@/lib/server/db";
 import { getCurrentUser } from "@/lib/server/auth";
 import { emit } from "@/lib/server/bus";
+import { handle, httpError } from "@/lib/server/http";
 
 // GET /api/invoices/:id — admin only.
-export async function GET(
+export const GET = (
   _: NextRequest,
   { params }: { params: { id: string } }
-) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const inv = await getInvoice(params.id);
-  if (!inv) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ data: inv });
-}
+) =>
+  handle(async () => {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "admin") httpError(401, "Unauthorized");
+    const inv = await getInvoice(params.id);
+    if (!inv) httpError(404, "Not found");
+    return inv;
+  });
 
 // PATCH /api/invoices/:id — admin only. Toggle paid/unpaid.
-export async function PATCH(
+export const PATCH = (
   req: NextRequest,
   { params }: { params: { id: string } }
-) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const body = await req.json();
-  const updated = await updateInvoice(params.id, body);
-  if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  emit({ channel: "invoices", action: "updated", id: params.id });
-  return NextResponse.json({ data: updated });
-}
+) =>
+  handle(async () => {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "admin") httpError(401, "Unauthorized");
+    const body = await req.json();
+    const updated = await updateInvoice(params.id, body);
+    if (!updated) httpError(404, "Not found");
+    emit({ channel: "invoices", action: "updated", id: params.id });
+    return updated;
+  });

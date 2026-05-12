@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getOrder, updateOrder } from "@/lib/server/db";
 import { getCurrentUser } from "@/lib/server/auth";
 import { emit } from "@/lib/server/bus";
+import { handle, httpError } from "@/lib/server/http";
 import type { OrderStatus } from "@/lib/types";
 
 const VALID: OrderStatus[] = [
@@ -12,36 +13,36 @@ const VALID: OrderStatus[] = [
   "cancelled",
 ];
 
-// GET /api/orders/:id  — owner or admin.
-export async function GET(
+// GET /api/orders/:id — owner or admin.
+export const GET = (
   _: NextRequest,
   { params }: { params: { id: string } }
-) {
-  const o = await getOrder(params.id);
-  if (!o) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (user.role !== "admin" && o.userId !== user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-  return NextResponse.json({ data: o });
-}
+) =>
+  handle(async () => {
+    const o = await getOrder(params.id);
+    if (!o) httpError(404, "Not found");
+    const user = await getCurrentUser();
+    if (!user) httpError(401, "Unauthorized");
+    if (user!.role !== "admin" && o!.userId !== user!.id) {
+      httpError(403, "Forbidden");
+    }
+    return o;
+  });
 
-// PATCH /api/orders/:id  — admin only.
-export async function PATCH(
+// PATCH /api/orders/:id — admin only.
+export const PATCH = (
   req: NextRequest,
   { params }: { params: { id: string } }
-) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const { status } = (await req.json()) as { status?: OrderStatus };
-  if (!status || !VALID.includes(status)) {
-    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
-  }
-  const updated = await updateOrder(params.id, { status });
-  if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  emit({ channel: "orders", action: "updated", id: params.id });
-  return NextResponse.json({ data: updated });
-}
+) =>
+  handle(async () => {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "admin") httpError(401, "Unauthorized");
+    const { status } = (await req.json()) as { status?: OrderStatus };
+    if (!status || !VALID.includes(status)) {
+      httpError(400, "Invalid status");
+    }
+    const updated = await updateOrder(params.id, { status });
+    if (!updated) httpError(404, "Not found");
+    emit({ channel: "orders", action: "updated", id: params.id });
+    return updated;
+  });

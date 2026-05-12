@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import {
   deleteProduct,
   getProduct,
@@ -6,46 +6,46 @@ import {
 } from "@/lib/server/db";
 import { getCurrentUser } from "@/lib/server/auth";
 import { emit } from "@/lib/server/bus";
+import { handle, httpError } from "@/lib/server/http";
 
 // GET /api/products/:id — public.
-export async function GET(
+export const GET = (
   _: NextRequest,
   { params }: { params: { id: string } }
-) {
-  const p = await getProduct(params.id);
-  if (!p) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ data: p });
-}
+) =>
+  handle(async () => {
+    const p = await getProduct(params.id);
+    if (!p) httpError(404, "Not found");
+    return p;
+  });
 
 // PATCH /api/products/:id — admin only.
-export async function PATCH(
+export const PATCH = (
   req: NextRequest,
   { params }: { params: { id: string } }
-) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+) =>
+  handle(async () => {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "admin") httpError(401, "Unauthorized");
 
-  const body = await req.json();
-  const updated = await updateProduct(params.id, body);
-  if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  emit({ channel: "products", action: "updated", id: params.id });
-  return NextResponse.json({ data: updated });
-}
+    const body = await req.json();
+    const updated = await updateProduct(params.id, body);
+    if (!updated) httpError(404, "Not found");
+    emit({ channel: "products", action: "updated", id: params.id });
+    return updated;
+  });
 
 // DELETE /api/products/:id — admin only.
-export async function DELETE(
+export const DELETE = (
   _: NextRequest,
   { params }: { params: { id: string } }
-) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+) =>
+  handle(async () => {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "admin") httpError(401, "Unauthorized");
 
-  const removed = await deleteProduct(params.id);
-  if (!removed) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  emit({ channel: "products", action: "deleted", id: params.id });
-  return NextResponse.json({ data: removed });
-}
+    const removed = await deleteProduct(params.id);
+    if (!removed) httpError(404, "Not found");
+    emit({ channel: "products", action: "deleted", id: params.id });
+    return removed;
+  });

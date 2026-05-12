@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
 import { listUsers } from "@/lib/server/db";
 import { toPublicUser } from "@/lib/server/auth";
+import { handle } from "@/lib/server/http";
+
+export const dynamic = "force-dynamic";
 
 // GET /api/users — admin only (gated via middleware).
-export async function GET() {
-  const users = await listUsers();
-  return NextResponse.json({ data: users.map(toPublicUser) });
-}
+export const GET = () =>
+  handle(async () => {
+    const users = await listUsers();
+    return users.map(toPublicUser);
+  });
