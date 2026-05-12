@@ -20,11 +20,15 @@ export function CartButton({ floating = false }: { floating?: boolean }) {
   }, []);
 
   if (floating) {
+    // Hidden on mobile (md:grid): the BottomNav already exposes a Cart tab
+    // in the correct tab-bar slot, so on phones the floating FAB was
+    // redundant and caused the visual overlap people reported. On tablets
+    // and up there is no bottom nav, so the FAB earns its keep.
     return (
       <button
         onClick={open}
         aria-label="Open cart"
-        className="fixed bottom-24 end-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-ink-900 text-white shadow-lift transition hover:bg-ink-800 md:bottom-6"
+        className="fixed end-4 bottom-6 z-40 hidden h-14 w-14 place-items-center rounded-full bg-ink-900 text-white shadow-lift transition hover:bg-ink-800 md:grid"
       >
         <Icon name="ShoppingBag" size={22} />
         {count > 0 && (

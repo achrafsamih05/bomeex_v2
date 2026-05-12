@@ -46,3 +46,13 @@ body {
 .pe-safe {
   padding-inline-end: env(safe-area-inset-right, 0);
 }
+
+/* Vertical safe-area insets (iOS home indicator, Android gesture bar).
+   pb-safe is what the mobile BottomNav uses to avoid being covered by
+   the home indicator; pt-safe is available for notched top bars. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0);
+}
