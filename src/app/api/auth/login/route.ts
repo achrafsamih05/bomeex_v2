@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import {
   createSessionToken,
+  hashPassword,
+  isLegacyPlaintextPassword,
   setSessionCookie,
   toPublicUser,
   verifyPassword,
@@ -33,7 +35,19 @@ export const POST = (req: NextRequest) =>
       httpError(403, "This account does not have admin access");
     }
 
-    await updateUser(user!.id, { lastSeenAt: new Date().toISOString() });
+    // If the stored password was plaintext (manually inserted row), upgrade
+    // it to a proper scrypt hash now that we know the cleartext is correct.
+    // This is a one-time migration per account.
+    const patch: { lastSeenAt: string; passwordHash?: string } = {
+      lastSeenAt: new Date().toISOString(),
+    };
+    if (isLegacyPlaintextPassword(user!.passwordHash)) {
+      patch.passwordHash = hashPassword(password!);
+      // eslint-disable-next-line no-console
+      console.log(`[auth] upgraded legacy plaintext password for ${user!.id}`);
+    }
+
+    await updateUser(user!.id, patch);
     const token = createSessionToken(user!);
     setSessionCookie(token);
 

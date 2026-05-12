@@ -81,6 +81,13 @@ export function verifySessionToken(token: string | undefined | null): SessionPay
 
 // ---------------------------------------------------------------------------
 // Password hashing (scrypt with random salt). Format: "<salt>$<hash>"
+//
+// For backwards compatibility with admin rows inserted manually via the
+// Supabase SQL editor (where the password may be stored as plain text for
+// convenience), verifyPassword falls back to a constant-time equality check
+// when the stored value doesn't look like "<hex>$<hex>". Every call is
+// wrapped in a try/catch so a malformed value (null, undefined, random text)
+// can never crash the login route — it just returns false.
 // ---------------------------------------------------------------------------
 
 export function hashPassword(pw: string): string {
@@ -89,13 +96,72 @@ export function hashPassword(pw: string): string {
   return `${salt}$${hash}`;
 }
 
-export function verifyPassword(pw: string, stored: string): boolean {
-  const [salt, hash] = stored.split("$");
-  if (!salt || !hash) return false;
-  const attempt = scryptSync(pw, salt, 64);
-  const expected = Buffer.from(hash, "hex");
-  if (attempt.length !== expected.length) return false;
-  return timingSafeEqual(attempt, expected);
+function constantTimeEqual(a: string, b: string): boolean {
+  // timingSafeEqual requires equal-length buffers. Pad both so a length
+  // mismatch still takes the same time as a content mismatch.
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  const len = Math.max(bufA.length, bufB.length, 1);
+  const padA = Buffer.alloc(len);
+  const padB = Buffer.alloc(len);
+  bufA.copy(padA);
+  bufB.copy(padB);
+  return timingSafeEqual(padA, padB) && bufA.length === bufB.length;
+}
+
+export function verifyPassword(
+  pw: string,
+  stored: string | null | undefined
+): boolean {
+  try {
+    // Defensive: reject anything that isn't a non-empty string before we
+    // ever call .split() on it. This is the crash site the login error
+    // ("Cannot read properties of undefined (reading 'split')") points at.
+    if (typeof stored !== "string" || stored.length === 0) return false;
+    if (typeof pw !== "string" || pw.length === 0) return false;
+
+    // If the stored value doesn't look like a "<salt>$<hash>" scrypt string,
+    // treat it as plaintext and do a constant-time string compare. This is
+    // how admin accounts manually inserted via the Supabase dashboard keep
+    // working — the first successful login should then be re-hashed by the
+    // caller (see login route) on the next successful auth.
+    const dollar = stored.indexOf("$");
+    if (dollar <= 0 || dollar === stored.length - 1) {
+      return constantTimeEqual(pw, stored);
+    }
+
+    const salt = stored.slice(0, dollar);
+    const hash = stored.slice(dollar + 1);
+    // Salt/hash should be hex; if not, fall back to plaintext compare.
+    if (!/^[0-9a-f]+$/i.test(salt) || !/^[0-9a-f]+$/i.test(hash)) {
+      return constantTimeEqual(pw, stored);
+    }
+
+    const attempt = scryptSync(pw, salt, 64);
+    const expected = Buffer.from(hash, "hex");
+    if (attempt.length !== expected.length) return false;
+    return timingSafeEqual(attempt, expected);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[auth] verifyPassword threw:", err);
+    return false;
+  }
+}
+
+/**
+ * Returns true if the stored value looks like a legacy plaintext password
+ * (no "$" delimiter or non-hex segments). Callers can use this to upgrade
+ * the user's row to a proper scrypt hash on the next successful login.
+ */
+export function isLegacyPlaintextPassword(
+  stored: string | null | undefined
+): boolean {
+  if (typeof stored !== "string" || stored.length === 0) return false;
+  const dollar = stored.indexOf("$");
+  if (dollar <= 0 || dollar === stored.length - 1) return true;
+  const salt = stored.slice(0, dollar);
+  const hash = stored.slice(dollar + 1);
+  return !/^[0-9a-f]+$/i.test(salt) || !/^[0-9a-f]+$/i.test(hash);
 }
 
 // ---------------------------------------------------------------------------

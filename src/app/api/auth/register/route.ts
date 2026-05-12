@@ -37,7 +37,10 @@ export const POST = (req: NextRequest) =>
     const existing = await getUserByEmail(email);
     if (existing) httpError(409, "Email already registered");
 
-    const user: User = {
+    // Build the row from the exact fields our Supabase `users` table expects
+    // (see supabase/schema.sql). We hash the password before it ever leaves
+    // this process; plaintext never hits the DB or a log line.
+    const draft: User = {
       id: `u-${Date.now().toString(36)}`,
       email: email.toLowerCase().trim(),
       name,
@@ -52,11 +55,14 @@ export const POST = (req: NextRequest) =>
       createdAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
     };
-    await createUser(user);
-    emit({ channel: "users", action: "created", id: user.id });
 
-    const token = createSessionToken(user);
+    // createUser returns the persisted row — use THAT, not our local draft,
+    // so the response reflects exactly what the database wrote.
+    const created = await createUser(draft);
+    emit({ channel: "users", action: "created", id: created.id });
+
+    const token = createSessionToken(created);
     setSessionCookie(token);
 
-    return toPublicUser(user);
+    return toPublicUser(created);
   });

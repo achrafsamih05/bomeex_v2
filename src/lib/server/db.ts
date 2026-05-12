@@ -41,11 +41,28 @@ import type {
 const read = () => getSupabase();
 const write = () => getSupabaseAdmin();
 
-function raise(msg: string, err: unknown): never {
-  // Log with enough context to debug in Vercel logs without leaking secrets.
+/**
+ * Log the full Supabase error (with code/hint/details) to Vercel logs, then
+ * throw an Error whose `.message` carries the real cause. Our API routes wrap
+ * handlers in `handle()` (src/lib/server/http.ts), which turns thrown errors
+ * into clean `{ error: "..." }` JSON responses — so the browser never sees
+ * an HTML crash page while we still get full detail server-side.
+ */
+function raise(op: string, err: unknown): never {
   // eslint-disable-next-line no-console
-  console.error(`[db] ${msg}:`, err);
-  throw new Error(msg);
+  console.error(`[db] ${op} failed:`, err);
+  const e = err as {
+    message?: string;
+    code?: string;
+    details?: string;
+    hint?: string;
+  } | null;
+  const parts = [op, "failed"];
+  if (e?.message) parts.push(`— ${e.message}`);
+  if (e?.code) parts.push(`(code ${e.code})`);
+  if (e?.details) parts.push(`· ${e.details}`);
+  if (e?.hint) parts.push(`· hint: ${e.hint}`);
+  throw new Error(parts.join(" "));
 }
 
 // ---------- Products ----------
@@ -55,7 +72,7 @@ export async function listProducts(): Promise<Product[]> {
     .from("products")
     .select("*")
     .order("created_at", { ascending: false });
-  if (error) raise("listProducts failed", error);
+  if (error) raise("listProducts", error);
   return (data as ProductRow[]).map(productFromRow);
 }
 
@@ -65,13 +82,13 @@ export async function getProduct(id: string): Promise<Product | null> {
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (error) raise("getProduct failed", error);
+  if (error) raise("getProduct", error);
   return data ? productFromRow(data as ProductRow) : null;
 }
 
 export async function createProduct(p: Product): Promise<void> {
   const { error } = await write().from("products").insert(productToRow(p));
-  if (error) raise("createProduct failed", error);
+  if (error) raise("createProduct", error);
 }
 
 export async function updateProduct(
@@ -85,7 +102,7 @@ export async function updateProduct(
     .eq("id", id)
     .select()
     .maybeSingle();
-  if (error) raise("updateProduct failed", error);
+  if (error) raise("updateProduct", error);
   return data ? productFromRow(data as ProductRow) : null;
 }
 
@@ -96,7 +113,7 @@ export async function deleteProduct(id: string): Promise<Product | null> {
     .eq("id", id)
     .select()
     .maybeSingle();
-  if (error) raise("deleteProduct failed", error);
+  if (error) raise("deleteProduct", error);
   return data ? productFromRow(data as ProductRow) : null;
 }
 
@@ -110,7 +127,7 @@ export async function nextProductId(): Promise<string> {
   const { count, error } = await write()
     .from("products")
     .select("*", { count: "exact", head: true });
-  if (error) raise("nextProductId failed", error);
+  if (error) raise("nextProductId", error);
   const n = (count ?? 0) + 1;
   return `p-${String(n).padStart(3, "0")}`;
 }
@@ -122,7 +139,7 @@ export async function listCategories(): Promise<Category[]> {
     .from("categories")
     .select("*")
     .order("slug");
-  if (error) raise("listCategories failed", error);
+  if (error) raise("listCategories", error);
   return (data as CategoryRow[]).map(categoryFromRow);
 }
 
@@ -134,7 +151,7 @@ async function loadAllOrderItems(orderIds: string[]): Promise<OrderItemRow[]> {
     .from("order_items")
     .select("*")
     .in("order_id", orderIds);
-  if (error) raise("loadAllOrderItems failed", error);
+  if (error) raise("loadAllOrderItems", error);
   return (data ?? []) as OrderItemRow[];
 }
 
@@ -143,7 +160,7 @@ export async function listOrders(): Promise<Order[]> {
     .from("orders")
     .select("*")
     .order("created_at", { ascending: false });
-  if (error) raise("listOrders failed", error);
+  if (error) raise("listOrders", error);
   const rows = (data ?? []) as OrderRow[];
   const items = await loadAllOrderItems(rows.map((r) => r.id));
   return rows.map((r) => orderFromRow(r, items));
@@ -155,7 +172,7 @@ export async function getOrder(id: string): Promise<Order | null> {
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (error) raise("getOrder failed", error);
+  if (error) raise("getOrder", error);
   if (!data) return null;
   const items = await loadAllOrderItems([id]);
   return orderFromRow(data as OrderRow, items);
@@ -184,7 +201,7 @@ export async function createOrder(o: Order): Promise<void> {
   };
 
   const { error: orderErr } = await sb.from("orders").insert(orderRow);
-  if (orderErr) raise("createOrder failed (orders insert)", orderErr);
+  if (orderErr) raise("createOrder (orders insert)", orderErr);
 
   if (o.items.length > 0) {
     const itemRows = o.items.map<OrderItemRow>((i) => ({
@@ -198,7 +215,7 @@ export async function createOrder(o: Order): Promise<void> {
     if (itemsErr) {
       // Best-effort rollback so we don't leave a dangling empty order.
       await sb.from("orders").delete().eq("id", o.id);
-      raise("createOrder failed (order_items insert)", itemsErr);
+      raise("createOrder (order_items insert)", itemsErr);
     }
   }
 }
@@ -223,7 +240,7 @@ export async function updateOrder(
     .eq("id", id)
     .select()
     .maybeSingle();
-  if (error) raise("updateOrder failed", error);
+  if (error) raise("updateOrder", error);
   if (!data) return null;
   const items = await loadAllOrderItems([id]);
   return orderFromRow(data as OrderRow, items);
@@ -233,7 +250,7 @@ export async function nextOrderId(): Promise<string> {
   const { count, error } = await write()
     .from("orders")
     .select("*", { count: "exact", head: true });
-  if (error) raise("nextOrderId failed", error);
+  if (error) raise("nextOrderId", error);
   const n = 1000 + (count ?? 0) + 1;
   return `o-${n}`;
 }
@@ -245,7 +262,7 @@ export async function listInvoices(): Promise<Invoice[]> {
     .from("invoices")
     .select("*")
     .order("issued_at", { ascending: false });
-  if (error) raise("listInvoices failed", error);
+  if (error) raise("listInvoices", error);
   return ((data ?? []) as InvoiceRow[]).map(invoiceFromRow);
 }
 
@@ -255,7 +272,7 @@ export async function getInvoice(id: string): Promise<Invoice | null> {
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (error) raise("getInvoice failed", error);
+  if (error) raise("getInvoice", error);
   return data ? invoiceFromRow(data as InvoiceRow) : null;
 }
 
@@ -269,7 +286,7 @@ export async function createInvoice(inv: Invoice): Promise<void> {
     status: inv.status,
     amount: inv.amount,
   });
-  if (error) raise("createInvoice failed", error);
+  if (error) raise("createInvoice", error);
 }
 
 export async function updateInvoice(
@@ -288,7 +305,7 @@ export async function updateInvoice(
     .eq("id", id)
     .select()
     .maybeSingle();
-  if (error) raise("updateInvoice failed", error);
+  if (error) raise("updateInvoice", error);
   return data ? invoiceFromRow(data as InvoiceRow) : null;
 }
 
@@ -296,7 +313,7 @@ export async function nextInvoiceId(): Promise<string> {
   const { count, error } = await write()
     .from("invoices")
     .select("*", { count: "exact", head: true });
-  if (error) raise("nextInvoiceId failed", error);
+  if (error) raise("nextInvoiceId", error);
   const n = 5000 + (count ?? 0) + 1;
   return `i-${n}`;
 }
@@ -308,7 +325,7 @@ export async function listUsers(): Promise<User[]> {
     .from("users")
     .select("*")
     .order("created_at", { ascending: false });
-  if (error) raise("listUsers failed", error);
+  if (error) raise("listUsers", error);
   return ((data ?? []) as UserRow[]).map(userFromRow);
 }
 
@@ -318,7 +335,7 @@ export async function getUserById(id: string): Promise<User | null> {
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (error) raise("getUserById failed", error);
+  if (error) raise("getUserById", error);
   return data ? userFromRow(data as UserRow) : null;
 }
 
@@ -329,13 +346,23 @@ export async function getUserByEmail(email: string): Promise<User | null> {
     .select("*")
     .ilike("email", e)
     .maybeSingle();
-  if (error) raise("getUserByEmail failed", error);
+  if (error) raise("getUserByEmail", error);
   return data ? userFromRow(data as UserRow) : null;
 }
 
-export async function createUser(u: User): Promise<void> {
-  const { error } = await write().from("users").insert(userToRow(u));
-  if (error) raise("createUser failed", error);
+export async function createUser(u: User): Promise<User> {
+  const row = userToRow(u);
+  // .select().single() returns the persisted row — which is what we want the
+  // API to reply with, so the client sees exactly what the DB stored. That
+  // way schema drift (missing columns, RLS policy rejections, etc.) surfaces
+  // immediately as a real error instead of a silent no-op.
+  const { data, error } = await write()
+    .from("users")
+    .insert(row)
+    .select()
+    .single();
+  if (error) raise("createUser", error);
+  return userFromRow(data as UserRow);
 }
 
 export async function updateUser(
@@ -349,7 +376,7 @@ export async function updateUser(
     .eq("id", id)
     .select()
     .maybeSingle();
-  if (error) raise("updateUser failed", error);
+  if (error) raise("updateUser", error);
   return data ? userFromRow(data as UserRow) : null;
 }
 
@@ -360,7 +387,7 @@ export async function deleteUser(id: string): Promise<User | null> {
     .eq("id", id)
     .select()
     .maybeSingle();
-  if (error) raise("deleteUser failed", error);
+  if (error) raise("deleteUser", error);
   return data ? userFromRow(data as UserRow) : null;
 }
 
@@ -376,7 +403,7 @@ export async function getSettings(): Promise<Settings> {
     .select("*")
     .eq("id", SETTINGS_ID)
     .maybeSingle();
-  if (error) raise("getSettings failed", error);
+  if (error) raise("getSettings", error);
   if (!data) {
     // Settings row should exist (seeded). If missing (fresh DB), return sane
     // defaults so the storefront can still render.
@@ -400,7 +427,7 @@ export async function updateSettings(
     .eq("id", SETTINGS_ID)
     .select()
     .maybeSingle();
-  if (error) raise("updateSettings failed", error);
+  if (error) raise("updateSettings", error);
   if (!data) {
     // Upsert if the single row is missing.
     const defaults = {
@@ -412,7 +439,7 @@ export async function updateSettings(
       ...row,
     };
     const upsert = await write().from("settings").upsert(defaults).select().single();
-    if (upsert.error) raise("updateSettings upsert failed", upsert.error);
+    if (upsert.error) raise("updateSettings (upsert)", upsert.error);
     return settingsFromRow(upsert.data as SettingsRow);
   }
   return settingsFromRow(data as SettingsRow);
