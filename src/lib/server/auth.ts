@@ -115,16 +115,26 @@ export function verifyPassword(
 ): boolean {
   try {
     // Defensive: reject anything that isn't a non-empty string before we
-    // ever call .split() on it. This is the crash site the login error
-    // ("Cannot read properties of undefined (reading 'split')") points at.
+    // ever call .split() / .indexOf() on it. This is the crash site the
+    // login error ("Cannot read properties of undefined (reading 'split')")
+    // points at.
     if (typeof stored !== "string" || stored.length === 0) return false;
     if (typeof pw !== "string" || pw.length === 0) return false;
 
-    // If the stored value doesn't look like a "<salt>$<hash>" scrypt string,
-    // treat it as plaintext and do a constant-time string compare. This is
-    // how admin accounts manually inserted via the Supabase dashboard keep
-    // working — the first successful login should then be re-hashed by the
-    // caller (see login route) on the next successful auth.
+    // Belt-and-braces plaintext fallback: if the stored value doesn't even
+    // contain a "$", it cannot be a scrypt hash — skip the crypto path and
+    // do a constant-time equality compare. This is the explicit guard
+    // pattern requested in the bug report, kept as an early return so the
+    // intent is obvious at a glance.
+    if (!stored.includes("$")) {
+      return constantTimeEqual(pw, stored);
+    }
+
+    // If the stored value doesn't look like a proper "<salt>$<hash>" scrypt
+    // string (delimiter at start/end, or non-hex segments), treat it as
+    // plaintext and do a constant-time string compare. This is how admin
+    // accounts manually inserted via the Supabase dashboard keep working —
+    // the login route will re-hash them to scrypt on first successful auth.
     const dollar = stored.indexOf("$");
     if (dollar <= 0 || dollar === stored.length - 1) {
       return constantTimeEqual(pw, stored);
@@ -157,6 +167,8 @@ export function isLegacyPlaintextPassword(
   stored: string | null | undefined
 ): boolean {
   if (typeof stored !== "string" || stored.length === 0) return false;
+  // No "$" at all → definitely plaintext.
+  if (!stored.includes("$")) return true;
   const dollar = stored.indexOf("$");
   if (dollar <= 0 || dollar === stored.length - 1) return true;
   const salt = stored.slice(0, dollar);
