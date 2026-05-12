@@ -86,10 +86,24 @@ export async function getProduct(id: string): Promise<Product | null> {
   return data ? productFromRow(data as ProductRow) : null;
 }
 
-export async function createProduct(p: Product): Promise<void> {
-  const { error } = await write().from("products").insert(productToRow(p));
+export async function createProduct(p: Product): Promise<Product> {
+  // .select().single() returns the persisted row, so the API replies with
+  // what the DB actually stored (and schema errors surface loudly via
+  // raise() instead of silently producing a half-written row).
+  const { data, error } = await write()
+    .from("products")
+    .insert(productToRow(p))
+    .select()
+    .single();
   if (error) raise("createProduct", error);
+  return productFromRow(data as ProductRow);
 }
+
+/**
+ * Alias kept for callers using the "addProduct" verb. Same contract as
+ * createProduct — new product row in Supabase, returns the persisted shape.
+ */
+export const addProduct = createProduct;
 
 export async function updateProduct(
   id: string,
