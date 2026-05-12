@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { products } from "@/lib/db";
+import { useProducts } from "@/lib/client/hooks";
 import { ProductCard } from "./ProductCard";
 import { useI18n } from "@/lib/useI18n";
 
@@ -11,6 +11,7 @@ export function ProductGrid() {
   const params = useSearchParams();
   const category = params.get("category") ?? "all";
   const q = (params.get("q") ?? "").toLowerCase().trim();
+  const { data: products, loading } = useProducts();
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -25,7 +26,7 @@ export function ProductGrid() {
       }
       return true;
     });
-  }, [category, q, locale]);
+  }, [products, category, q, locale]);
 
   return (
     <section>
@@ -36,7 +37,16 @@ export function ProductGrid() {
         <span className="text-sm text-ink-500">{filtered.length}</span>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div
+              key={i}
+              className="aspect-[3/4] animate-pulse rounded-2xl bg-ink-100"
+            />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-ink-200 bg-white p-10 text-center text-sm text-ink-500">
           {t("products.empty")}
         </div>

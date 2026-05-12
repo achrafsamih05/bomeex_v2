@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { categories } from "@/lib/db";
+import { listCategories } from "@/lib/server/db";
+import { handle } from "@/lib/server/http";
 
-// GET /api/categories
-export async function GET() {
-  return NextResponse.json({ data: categories });
-}
+export const dynamic = "force-dynamic";
+
+// GET /api/categories — public.
+export const GET = () => handle(() => listCategories());

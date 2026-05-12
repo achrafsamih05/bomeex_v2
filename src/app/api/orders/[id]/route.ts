@@ -1,5 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { orders } from "@/lib/db";
+import { NextRequest } from "next/server";
+import { getOrder, updateOrder } from "@/lib/server/db";
+import { getCurrentUser } from "@/lib/server/auth";
+import { emit } from "@/lib/server/bus";
+import { handle, httpError } from "@/lib/server/http";
 import type { OrderStatus } from "@/lib/types";
 
 const VALID: OrderStatus[] = [
@@ -10,21 +13,36 @@ const VALID: OrderStatus[] = [
   "cancelled",
 ];
 
-// GET /api/orders/:id
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
-  const o = orders.find((x) => x.id === params.id);
-  if (!o) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ data: o });
-}
+// GET /api/orders/:id — owner or admin.
+export const GET = (
+  _: NextRequest,
+  { params }: { params: { id: string } }
+) =>
+  handle(async () => {
+    const o = await getOrder(params.id);
+    if (!o) httpError(404, "Not found");
+    const user = await getCurrentUser();
+    if (!user) httpError(401, "Unauthorized");
+    if (user!.role !== "admin" && o!.userId !== user!.id) {
+      httpError(403, "Forbidden");
+    }
+    return o;
+  });
 
-// PATCH /api/orders/:id  — update status
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const idx = orders.findIndex((x) => x.id === params.id);
-  if (idx === -1) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const { status } = (await req.json()) as { status?: OrderStatus };
-  if (!status || !VALID.includes(status)) {
-    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
-  }
-  orders[idx] = { ...orders[idx], status };
-  return NextResponse.json({ data: orders[idx] });
-}
+// PATCH /api/orders/:id — admin only.
+export const PATCH = (
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) =>
+  handle(async () => {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "admin") httpError(401, "Unauthorized");
+    const { status } = (await req.json()) as { status?: OrderStatus };
+    if (!status || !VALID.includes(status)) {
+      httpError(400, "Invalid status");
+    }
+    const updated = await updateOrder(params.id, { status });
+    if (!updated) httpError(404, "Not found");
+    emit({ channel: "orders", action: "updated", id: params.id });
+    return updated;
+  });

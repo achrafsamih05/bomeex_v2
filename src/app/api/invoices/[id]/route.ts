@@ -1,18 +1,33 @@
-import { NextRequest, NextResponse } from "next/server";
-import { invoices } from "@/lib/db";
+import { NextRequest } from "next/server";
+import { getInvoice, updateInvoice } from "@/lib/server/db";
+import { getCurrentUser } from "@/lib/server/auth";
+import { emit } from "@/lib/server/bus";
+import { handle, httpError } from "@/lib/server/http";
 
-// GET /api/invoices/:id
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
-  const inv = invoices.find((i) => i.id === params.id);
-  if (!inv) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ data: inv });
-}
+// GET /api/invoices/:id — admin only.
+export const GET = (
+  _: NextRequest,
+  { params }: { params: { id: string } }
+) =>
+  handle(async () => {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "admin") httpError(401, "Unauthorized");
+    const inv = await getInvoice(params.id);
+    if (!inv) httpError(404, "Not found");
+    return inv;
+  });
 
-// PATCH /api/invoices/:id  — mark as paid/unpaid
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const idx = invoices.findIndex((i) => i.id === params.id);
-  if (idx === -1) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const body = await req.json();
-  invoices[idx] = { ...invoices[idx], ...body };
-  return NextResponse.json({ data: invoices[idx] });
-}
+// PATCH /api/invoices/:id — admin only. Toggle paid/unpaid.
+export const PATCH = (
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) =>
+  handle(async () => {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "admin") httpError(401, "Unauthorized");
+    const body = await req.json();
+    const updated = await updateInvoice(params.id, body);
+    if (!updated) httpError(404, "Not found");
+    emit({ channel: "invoices", action: "updated", id: params.id });
+    return updated;
+  });

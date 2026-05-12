@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { StoreShell } from "@/components/storefront/StoreShell";
 import { Icon } from "@/components/ui/Icon";
-import { categories, products } from "@/lib/db";
+import { useCategories, useProducts } from "@/lib/client/hooks";
 import { useI18n } from "@/lib/useI18n";
 
 export default function CategoriesPage() {
   const { t, locale } = useI18n();
+  const categories = useCategories();
+  const { data: products } = useProducts();
+
   return (
     <StoreShell>
       <div className="space-y-6">
@@ -15,9 +18,7 @@ export default function CategoriesPage() {
           <h1 className="text-2xl font-semibold tracking-tight">
             {t("categories.title")}
           </h1>
-          <p className="mt-1 text-sm text-ink-500">
-            {t("hero.subtitle")}
-          </p>
+          <p className="mt-1 text-sm text-ink-500">{t("hero.subtitle")}</p>
         </header>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { categories } from "@/lib/db";
+import { useCategories } from "@/lib/client/hooks";
 import { Icon } from "../ui/Icon";
 import { useI18n } from "@/lib/useI18n";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ export function CategoryChips() {
   const router = useRouter();
   const params = useSearchParams();
   const active = params.get("category") ?? "all";
+  const categories = useCategories();
 
   function select(slug: string) {
     const sp = new URLSearchParams(params.toString());

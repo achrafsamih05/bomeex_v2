@@ -1,7 +1,13 @@
-import { NextResponse } from "next/server";
-import { invoices } from "@/lib/db";
+import { listInvoices } from "@/lib/server/db";
+import { getCurrentUser } from "@/lib/server/auth";
+import { handle, httpError } from "@/lib/server/http";
 
-// GET /api/invoices
-export async function GET() {
-  return NextResponse.json({ data: invoices });
-}
+export const dynamic = "force-dynamic";
+
+// GET /api/invoices — admin only.
+export const GET = () =>
+  handle(async () => {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "admin") httpError(401, "Unauthorized");
+    return listInvoices();
+  });

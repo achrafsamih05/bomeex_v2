@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Icon } from "@/components/ui/Icon";
-import { categories } from "@/lib/db";
+import { useCategories, useProducts, useSettings } from "@/lib/client/hooks";
+import { apiSend } from "@/lib/client/api";
 import { formatCurrency } from "@/lib/format";
 import { useI18n } from "@/lib/useI18n";
 import type { Product } from "@/lib/types";
@@ -24,38 +25,28 @@ interface DraftProduct {
   image: string;
 }
 
-const EMPTY_DRAFT: DraftProduct = {
-  sku: "",
-  nameEn: "",
-  nameAr: "",
-  nameFr: "",
-  descEn: "",
-  descAr: "",
-  descFr: "",
-  price: 0,
-  categoryId: categories[0]?.id ?? "",
-  stock: 0,
-  image: "",
-};
-
 export default function InventoryPage() {
   const { t, locale } = useI18n();
-  const [list, setList] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const categories = useCategories();
+  const { data: list, loading, reload } = useProducts();
+  const settings = useSettings();
+  const currency = settings?.currency ?? "USD";
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<DraftProduct | null>(null);
 
-  async function load() {
-    setLoading(true);
-    const res = await fetch("/api/products", { cache: "no-store" });
-    const json = await res.json();
-    setList(json.data);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
+  const EMPTY_DRAFT: DraftProduct = {
+    sku: "",
+    nameEn: "",
+    nameAr: "",
+    nameFr: "",
+    descEn: "",
+    descAr: "",
+    descFr: "",
+    price: 0,
+    categoryId: categories[0]?.id ?? "",
+    stock: 0,
+    image: "",
+  };
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -93,26 +84,18 @@ export default function InventoryPage() {
       image: d.image || "https://picsum.photos/seed/nova/800/800",
     };
     if (d.id) {
-      await fetch(`/api/products/${d.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      await apiSend(`/api/products/${d.id}`, "PATCH", payload);
     } else {
-      await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      await apiSend("/api/products", "POST", payload);
     }
     setEditing(null);
-    await load();
+    await reload();
   }
 
   async function remove(id: string) {
     if (!confirm("Delete this product?")) return;
-    await fetch(`/api/products/${id}`, { method: "DELETE" });
-    await load();
+    await apiSend(`/api/products/${id}`, "DELETE");
+    await reload();
   }
 
   return (
@@ -124,7 +107,8 @@ export default function InventoryPage() {
               {t("admin.inventory")}
             </h1>
             <p className="text-sm text-ink-500">
-              Manage your product catalog, stock and pricing.
+              Manage your product catalog, stock and pricing. Changes propagate
+              to the storefront in real time.
             </p>
           </div>
           <button
@@ -195,7 +179,7 @@ export default function InventoryPage() {
                       {cat?.name[locale] ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-end">
-                      {formatCurrency(p.price, locale)}
+                      {formatCurrency(p.price, locale, currency)}
                     </td>
                     <td className="px-4 py-3 text-end">
                       <span
@@ -240,6 +224,7 @@ export default function InventoryPage() {
       {editing && (
         <ProductEditor
           draft={editing}
+          categories={categories}
           onClose={() => setEditing(null)}
           onSave={save}
         />
@@ -250,10 +235,12 @@ export default function InventoryPage() {
 
 function ProductEditor({
   draft,
+  categories,
   onClose,
   onSave,
 }: {
   draft: DraftProduct;
+  categories: ReturnType<typeof useCategories>;
   onClose: () => void;
   onSave: (d: DraftProduct) => Promise<void>;
 }) {
@@ -307,7 +294,7 @@ function ProductEditor({
                 ))}
               </select>
             </L>
-            <L label="Price (USD)">
+            <L label="Price">
               <input
                 type="number"
                 step="0.01"

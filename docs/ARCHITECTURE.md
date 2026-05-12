@@ -1,73 +1,77 @@
 # Frontend Architecture
 
-This document is a quick map of every component and how state flows through the app.
+This is a quick map of the app layers and how data flows.
 
 ## Layer diagram
 
 ```
+ ┌──────────────────────────────────────────────────────────────────┐
+ │ Pages (src/app/*)                                                 │
+ │   Storefront: /, /categories, /checkout, /account                 │
+ │   Auth:       /login  /login/admin  /register                     │
+ │   Admin:      /admin, /admin/{inventory, orders, invoices,        │
+ │               users, settings}                                    │
+ └────────────┬─────────────────────────────────┬───────────────────┘
+              │                                 │
+              ▼                                 ▼
+       ┌──────────────┐                  ┌──────────────┐
+       │ StoreShell   │                  │ AdminShell   │
+       └──────┬───────┘                  └──────┬───────┘
+              │                                 │
+              ▼                                 ▼
  ┌──────────────────────────────────────────────────────────┐
- │  Pages (src/app/*)                                        │
- │    Storefront: /, /cart, /categories, /checkout, /account │
- │    Admin:      /admin, /admin/{inventory, orders, ...}    │
- └──────────────┬───────────────────────┬───────────────────┘
-                │                       │
-                ▼                       ▼
-      ┌────────────────┐        ┌────────────────┐
-      │  Storefront UI │        │   Admin UI     │
-      │  (StoreShell)  │        │  (AdminShell)  │
-      └────────┬───────┘        └────────┬───────┘
-               │                         │
-               ▼                         ▼
-      ┌────────────────────────────────────────┐
-      │  Shared primitives (src/components/ui) │
-      │   Icon, Button                         │
-      └────────────────────┬───────────────────┘
-                           ▼
-          ┌────────────────────────────────┐
-          │  State & services (src/lib)    │
-          │   useCart, useLocale, useI18n, │
-          │   db, format, types            │
-          └────────────────┬───────────────┘
-                           ▼
-                   ┌───────────────┐
-                   │  /api routes  │
-                   └───────────────┘
+ │ Client hooks (src/lib/client/hooks.ts)                    │
+ │   useProducts, useCategories, useSettings,                │
+ │   useOrders, useInvoices, useUsers, useMe                 │
+ │        │                                                  │
+ │        │  subscribes to                                   │
+ │        ▼                                                  │
+ │ SSE reader (src/lib/client/realtime.ts) ◄─── /api/events  │
+ └──────────────┬───────────────────────────────────────────┘
+                │  fetch/json
+                ▼
+          ┌──────────────┐
+          │ API routes   │ (src/app/api/*)
+          │  → emit()    │  bus.ts fires SSE
+          │  → server DB │
+          └──────────────┘
+                │
+                ▼
+       ┌──────────────────┐
+       │ src/lib/server/db │ (file-backed in dev, Supabase/Postgres in prod)
+       └──────────────────┘
+
+Edge middleware (src/middleware.ts) gates /admin/* and admin APIs
+by verifying the nova_session HMAC cookie.
 ```
-
-## Shared primitives (`src/components/ui`)
-
-- `Icon` — single lucide registry. Using string keys makes icons data-driven (categories reference icons by name in the DB).
-- `Button` — typed variants (`primary`, `secondary`, `ghost`, `danger`) and sizes.
-
-## Storefront (`src/components/storefront`)
-
-- `StoreShell` — wraps every storefront page. Mounts the toolbar, the cart drawer, and the bottom nav, and calls `useI18n` to sync `<html dir/lang>`.
-- `Toolbar` — glass header with brand, admin link, language switcher, cart button.
-- `LanguageSwitcher` — EN / AR / FR with a tidy dropdown.
-- `Hero` — gradient banner for brand messaging.
-- `SearchBar` — URL-synced search (`?q=`).
-- `CategoryChips` — URL-synced filter (`?category=`) with icons and an "All" chip.
-- `ProductGrid` — reads `?q` and `?category` and filters the product list; 2 columns on mobile, up to 5 on large screens.
-- `ProductCard` — image, rating badge, stock state, add-to-cart button.
-- `CartDrawer` — right-side drawer (flips to left in RTL), quantity controls, totals, clear and checkout buttons.
-- `CartButton` — variants: inline toolbar button and a floating FAB.
-- `BottomNav` — 4-tab mobile navigation.
-
-## Admin (`src/components/admin`)
-
-- `AdminShell` — sidebar + topbar + slot-in content.
 
 ## State
 
-| Store           | Purpose                                  | Persistence         |
-| --------------- | ---------------------------------------- | ------------------- |
-| `useCart`       | Cart items + drawer open state           | `localStorage`      |
-| `useLocale`     | Active locale (`en`/`ar`/`fr`)           | `localStorage`      |
+| Store            | Scope     | Persistence      |
+| ---------------- | --------- | ---------------- |
+| `useCart`        | Cart + drawer  | `localStorage` |
+| `useLocale`      | Active locale  | `localStorage` |
+| `useMe`          | Current user   | HTTP cookie (server) + memory |
+| `useSettings`    | Global config  | DB + SSE        |
+| `useProducts`    | Catalog        | DB + SSE        |
+| `useCategories`  | Filter list    | DB + SSE        |
+| `useOrders`      | Admin table    | DB + SSE        |
+| `useInvoices`    | Admin table    | DB + SSE        |
+| `useUsers`       | Admin table    | DB + SSE        |
 
-Both are Zustand stores under `src/lib/store/*`.
+## Realtime
+
+`src/lib/server/bus.ts` is a single `EventEmitter` stored on `globalThis` (hot-reload safe). Every mutating API route calls `emit({ channel, action, id })`. `src/app/api/events/route.ts` streams those events to any connected client as SSE. `src/lib/client/realtime.ts` opens one shared `EventSource` per tab and fans out to subscribed hooks.
+
+To scale horizontally: replace the `EventEmitter` with Redis pub/sub or Postgres `LISTEN/NOTIFY` — the client contract is unchanged.
+
+## Auth
+
+- `src/lib/server/auth.ts` — password hashing (scrypt), session token signing (HMAC-SHA256 via Node `crypto`), `getCurrentUser()`, `setSessionCookie()`.
+- `src/middleware.ts` — Edge runtime; re-implements the HMAC check with Web Crypto so it works without Node's `crypto`. Redirects unauthenticated/non-admin users to `/login/admin` for UI, or returns 401 for API.
 
 ## i18n & RTL
 
-- Messages live in `src/lib/i18n.ts` (one dictionary, keyed by message id).
-- `useI18n()` returns `{ locale, dir, t }` and sets `<html dir>` + `<html lang>` on mount/change.
-- Layout uses logical utilities (`start-*`, `end-*`, `ps-*`, `pe-*`) so the UI mirrors automatically for Arabic.
+- Dictionary in `src/lib/i18n.ts` (one keyed map per message id).
+- `useI18n()` returns `{ locale, dir, t, setLocale }` and syncs `<html dir/lang>` on mount.
+- Layout uses logical utilities (`start-*`, `end-*`, `ps-*`, `pe-*`) so mirroring for Arabic is automatic.

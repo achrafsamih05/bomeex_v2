@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo } from "react";
 import { Icon } from "../ui/Icon";
 import { useCart } from "@/lib/store/cart";
-import { products } from "@/lib/db";
+import { useProducts, useSettings } from "@/lib/client/hooks";
 import { formatCurrency } from "@/lib/format";
 import { useI18n } from "@/lib/useI18n";
 import { cn } from "@/lib/utils";
@@ -18,8 +18,11 @@ export function CartDrawer() {
   const setQuantity = useCart((s) => s.setQuantity);
   const removeItem = useCart((s) => s.removeItem);
   const clear = useCart((s) => s.clear);
+  const { data: products } = useProducts();
+  const settings = useSettings();
+  const currency = settings?.currency ?? "USD";
+  const taxRate = settings?.taxRate ?? 10;
 
-  // Disable body scroll when open.
   useEffect(() => {
     if (!isOpen) return;
     const prev = document.body.style.overflow;
@@ -37,19 +40,17 @@ export function CartDrawer() {
         return { item: i, product };
       })
       .filter((x): x is NonNullable<typeof x> => !!x);
-  }, [items]);
+  }, [items, products]);
 
   const subtotal = lines.reduce(
     (s, { item, product }) => s + product.price * item.quantity,
     0
   );
-  const tax = +(subtotal * 0.1).toFixed(2);
+  const tax = +(subtotal * (taxRate / 100)).toFixed(2);
   const total = +(subtotal + tax).toFixed(2);
 
   if (!isOpen) return null;
 
-  // Choose the slide animation based on writing direction so the drawer
-  // always slides in from the "end" side (right in LTR, left in RTL).
   const drawerAnim = dir === "rtl" ? "animate-slide-in-left" : "animate-slide-in-right";
 
   return (
@@ -140,7 +141,7 @@ export function CartDrawer() {
                         </button>
                       </div>
                       <span className="text-sm font-semibold">
-                        {formatCurrency(product.price * item.quantity, locale)}
+                        {formatCurrency(product.price * item.quantity, locale, currency)}
                       </span>
                     </div>
                   </div>
@@ -149,11 +150,11 @@ export function CartDrawer() {
             </ul>
 
             <div className="border-t border-ink-100 p-4 space-y-2">
-              <Row label={t("cart.subtotal")} value={formatCurrency(subtotal, locale)} />
-              <Row label={t("cart.tax")} value={formatCurrency(tax, locale)} />
+              <Row label={t("cart.subtotal")} value={formatCurrency(subtotal, locale, currency)} />
+              <Row label={`${t("cart.tax").replace(/\(.*\)/, `(${taxRate}%)`)}`} value={formatCurrency(tax, locale, currency)} />
               <Row
                 label={t("cart.total")}
-                value={formatCurrency(total, locale)}
+                value={formatCurrency(total, locale, currency)}
                 bold
               />
               <div className="flex gap-2 pt-2">

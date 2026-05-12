@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useState } from "react";
 import { Icon, ICONS } from "../ui/Icon";
+import { apiSend } from "@/lib/client/api";
+import { useMe } from "@/lib/client/hooks";
 import { useI18n } from "@/lib/useI18n";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +17,9 @@ interface NavItem {
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const { t } = useI18n();
+  const router = useRouter();
   const pathname = usePathname();
+  const { data: me, setData } = useMe();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const nav: NavItem[] = [
@@ -23,15 +27,22 @@ export function AdminShell({ children }: { children: ReactNode }) {
     { href: "/admin/inventory", label: t("admin.inventory"), icon: "Boxes" },
     { href: "/admin/orders", label: t("admin.orders"), icon: "Package" },
     { href: "/admin/invoices", label: t("admin.invoices"), icon: "FileText" },
+    { href: "/admin/users", label: t("admin.users"), icon: "Users" },
     { href: "/admin/settings", label: t("admin.settings"), icon: "Settings" },
   ];
 
+  async function logout() {
+    await apiSend("/api/auth/logout", "POST");
+    setData(null);
+    router.push("/login/admin");
+    router.refresh();
+  }
+
   return (
     <div className="min-h-dvh bg-ink-50 md:grid md:grid-cols-[260px_1fr]">
-      {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 start-0 z-40 w-64 transform border-e border-ink-100 bg-white transition md:sticky md:top-0 md:h-dvh md:translate-x-0",
+          "fixed inset-y-0 start-0 z-40 flex w-64 transform flex-col border-e border-ink-100 bg-white transition md:sticky md:top-0 md:h-dvh md:translate-x-0",
           mobileOpen
             ? "translate-x-0"
             : "-translate-x-full rtl:translate-x-full rtl:md:translate-x-0"
@@ -52,7 +63,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <Icon name="X" size={18} />
           </button>
         </div>
-        <nav className="p-3">
+        <nav className="flex-1 p-3">
           {nav.map((item) => {
             const isActive =
               item.href === "/admin"
@@ -76,7 +87,18 @@ export function AdminShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="p-3 mt-auto">
+        <div className="space-y-2 border-t border-ink-100 p-3">
+          {me && (
+            <div className="flex items-center gap-2 rounded-xl bg-ink-50 px-3 py-2">
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-ink-900 text-xs font-semibold text-white">
+                {me.name.charAt(0).toUpperCase()}
+              </span>
+              <div className="min-w-0 text-xs">
+                <div className="truncate font-medium">{me.name}</div>
+                <div className="truncate text-ink-500">{me.email}</div>
+              </div>
+            </div>
+          )}
           <Link
             href="/"
             className="flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm font-medium text-ink-700 hover:border-ink-300"
@@ -84,10 +106,16 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <Icon name="ArrowLeft" size={16} />
             Back to store
           </Link>
+          <button
+            onClick={logout}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-ink-600 hover:bg-ink-100"
+          >
+            <Icon name="LogOut" size={16} />
+            Sign out
+          </button>
         </div>
       </aside>
 
-      {/* Backdrop */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-30 bg-ink-950/40 md:hidden"
@@ -96,7 +124,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
       )}
 
       <div className="flex min-h-dvh flex-col">
-        {/* Topbar */}
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-ink-100 bg-white/90 px-4 backdrop-blur sm:px-6">
           <button
             onClick={() => setMobileOpen(true)}
