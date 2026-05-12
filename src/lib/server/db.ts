@@ -193,6 +193,59 @@ export async function listCategories(): Promise<Category[]> {
   return rows.map(categoryFromRow);
 }
 
+export async function getCategory(id: string): Promise<Category | null> {
+  const { data, error } = await sb()
+    .from("categories")
+    .select(CATEGORY_COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) raise("getCategory", error);
+  return data ? categoryFromRow(data as unknown as CategoryRow) : null;
+}
+
+export async function createCategory(c: Category): Promise<Category> {
+  const row = {
+    id: c.id,
+    slug: c.slug,
+    name_en: c.name.en,
+    name_ar: c.name.ar,
+    name_fr: c.name.fr,
+    icon: c.icon,
+  };
+  const { data, error } = await sb()
+    .from("categories")
+    .insert(row)
+    .select(CATEGORY_COLUMNS)
+    .single();
+  if (error) raise("createCategory", error);
+  return categoryFromRow(data as unknown as CategoryRow);
+}
+
+export async function deleteCategory(id: string): Promise<Category | null> {
+  const { data, error } = await sb()
+    .from("categories")
+    .delete()
+    .eq("id", id)
+    .select(CATEGORY_COLUMNS)
+    .maybeSingle();
+  if (error) raise("deleteCategory", error);
+  return data ? categoryFromRow(data as unknown as CategoryRow) : null;
+}
+
+/**
+ * Categories use human-readable ids like `c-<slug>`. Slugs are unique, so
+ * this naturally avoids collisions — we only fall back to a numeric suffix
+ * if the caller asks for an id and the slug-based one already exists.
+ */
+export async function nextCategoryId(slug: string): Promise<string> {
+  const base = `c-${slug}`;
+  const existing = await getCategory(base);
+  if (!existing) return base;
+  // Slug already used — append a short suffix.
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `${base}-${suffix}`;
+}
+
 // ---------- Orders ---------------------------------------------------------
 
 async function loadAllOrderItems(orderIds: string[]): Promise<OrderItemRow[]> {

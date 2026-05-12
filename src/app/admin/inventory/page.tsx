@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Icon } from "@/components/ui/Icon";
 import { useCategories, useProducts, useSettings } from "@/lib/client/hooks";
@@ -132,92 +132,126 @@ export default function InventoryPage() {
           />
         </div>
 
+        {/*
+         * Responsive table wrapper:
+         *   - overflow-x-auto lets narrow screens scroll the table
+         *     horizontally instead of squashing cells.
+         *   - min-w-[720px] on the inner <table> keeps columns readable
+         *     during that horizontal scroll.
+         *   - Non-essential columns (SKU, Category, Price) are hidden
+         *     below md; only Product / Stock / actions remain on mobile.
+         */}
         <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-soft">
-          <table className="min-w-full text-sm">
-            <thead className="bg-ink-50 text-ink-600">
-              <tr>
-                <th className="px-4 py-3 text-start font-medium">Product</th>
-                <th className="px-4 py-3 text-start font-medium">SKU</th>
-                <th className="px-4 py-3 text-start font-medium">Category</th>
-                <th className="px-4 py-3 text-end font-medium">Price</th>
-                <th className="px-4 py-3 text-end font-medium">Stock</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-100">
-              {loading && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead className="bg-ink-50 text-ink-600">
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-ink-400">
-                    Loading…
-                  </td>
+                  <th className="px-4 py-3 text-start font-medium">Product</th>
+                  <th className="hidden px-4 py-3 text-start font-medium md:table-cell">
+                    SKU
+                  </th>
+                  <th className="hidden px-4 py-3 text-start font-medium lg:table-cell">
+                    Category
+                  </th>
+                  <th className="hidden px-4 py-3 text-end font-medium md:table-cell">
+                    Price
+                  </th>
+                  <th className="px-4 py-3 text-end font-medium">Stock</th>
+                  <th className="px-4 py-3" />
                 </tr>
-              )}
-              {!loading && filtered.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-ink-400">
-                    No products.
-                  </td>
-                </tr>
-              )}
-              {filtered.map((p) => {
-                const cat = categories.find((c) => c.id === p.categoryId);
-                return (
-                  <tr key={p.id} className="hover:bg-ink-50/50">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={p.image}
-                          alt=""
-                          className="h-10 w-10 rounded-lg object-cover"
-                        />
-                        <span className="font-medium">{p.name[locale]}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-ink-600">{p.sku}</td>
-                    <td className="px-4 py-3 text-ink-600">
-                      {cat?.name[locale] ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-end">
-                      {formatCurrency(p.price, locale, currency)}
-                    </td>
-                    <td className="px-4 py-3 text-end">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                          p.stock <= 10
-                            ? "bg-red-50 text-red-700"
-                            : p.stock <= 25
-                            ? "bg-amber-50 text-amber-700"
-                            : "bg-emerald-50 text-emerald-700"
-                        )}
-                      >
-                        {p.stock}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-end">
-                      <div className="inline-flex gap-1">
-                        <button
-                          onClick={() => setEditing(toDraft(p))}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-ink-600 hover:bg-ink-100"
-                          aria-label="Edit"
-                        >
-                          <Icon name="Edit" size={16} />
-                        </button>
-                        <button
-                          onClick={() => remove(p.id)}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-ink-600 hover:bg-red-50 hover:text-red-600"
-                          aria-label="Delete"
-                        >
-                          <Icon name="Trash2" size={16} />
-                        </button>
-                      </div>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {loading && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-4 py-8 text-center text-ink-400"
+                    >
+                      Loading…
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                )}
+                {!loading && filtered.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-4 py-8 text-center text-ink-400"
+                    >
+                      No products.
+                    </td>
+                  </tr>
+                )}
+                {filtered.map((p) => {
+                  const cat = categories.find((c) => c.id === p.categoryId);
+                  return (
+                    <tr key={p.id} className="hover:bg-ink-50/50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={p.image}
+                            alt=""
+                            className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">
+                              {p.name[locale]}
+                            </div>
+                            {/* Mobile: fold SKU + price under the name. */}
+                            <div className="mt-0.5 text-xs text-ink-500 md:hidden">
+                              {p.sku} ·{" "}
+                              {formatCurrency(p.price, locale, currency)}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="hidden px-4 py-3 text-ink-600 md:table-cell">
+                        {p.sku}
+                      </td>
+                      <td className="hidden px-4 py-3 text-ink-600 lg:table-cell">
+                        {cat?.name[locale] ?? "—"}
+                      </td>
+                      <td className="hidden px-4 py-3 text-end md:table-cell">
+                        {formatCurrency(p.price, locale, currency)}
+                      </td>
+                      <td className="px-4 py-3 text-end">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                            p.stock <= 10
+                              ? "bg-red-50 text-red-700"
+                              : p.stock <= 25
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-emerald-50 text-emerald-700"
+                          )}
+                        >
+                          {p.stock}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-end">
+                        <div className="inline-flex gap-1">
+                          <button
+                            onClick={() => setEditing(toDraft(p))}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-ink-600 hover:bg-ink-100"
+                            aria-label="Edit"
+                          >
+                            <Icon name="Edit" size={16} />
+                          </button>
+                          <button
+                            onClick={() => remove(p.id)}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-ink-600 hover:bg-red-50 hover:text-red-600"
+                            aria-label="Delete"
+                          >
+                            <Icon name="Trash2" size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -246,6 +280,9 @@ function ProductEditor({
 }) {
   const [d, setD] = useState<DraftProduct>(draft);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function submit() {
     setSaving(true);
@@ -253,6 +290,32 @@ function ProductEditor({
       await onSave(d);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: form,
+        credentials: "same-origin",
+      });
+      const json = await res.json().catch(() => ({ error: "Invalid JSON" }));
+      if (!res.ok) throw new Error(json.error ?? `Upload failed (${res.status})`);
+      const url = (json.data as { url: string }).url;
+      setD((prev) => ({ ...prev, image: url }));
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      // Reset so selecting the same file twice still fires onChange.
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -311,14 +374,61 @@ function ProductEditor({
                 className={inputCls}
               />
             </L>
-            <L label="Image URL" wide>
-              <input
-                value={d.image}
-                onChange={(e) => setD({ ...d, image: e.target.value })}
-                className={inputCls}
-                placeholder="https://…"
-              />
+
+            {/*
+             * Image upload.
+             *   - File input (accept=image/*) replaces the old URL text field.
+             *   - On select, we POST to /api/upload which writes to the
+             *     `product-images` Supabase Storage bucket and returns the
+             *     public URL. That URL is stored on `d.image` and persisted
+             *     on save, exactly like the previous URL string.
+             *   - A small thumbnail previews whatever URL is currently set
+             *     (useful both after upload and when editing an existing
+             *     product).
+             */}
+            <L label="Product image" wide>
+              <div className="flex items-start gap-3">
+                <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl border border-ink-200 bg-ink-50 text-ink-400">
+                  {d.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={d.image}
+                      alt="Preview"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Icon name="Package" size={22} />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={onFileSelected}
+                    disabled={uploading}
+                    className={cn(
+                      "block w-full text-sm text-ink-700",
+                      "file:me-3 file:rounded-lg file:border-0 file:bg-ink-900 file:px-3 file:py-2",
+                      "file:text-sm file:font-medium file:text-white hover:file:bg-ink-800",
+                      "disabled:opacity-60"
+                    )}
+                  />
+                  {uploading && (
+                    <p className="text-xs text-ink-500">Uploading…</p>
+                  )}
+                  {uploadError && (
+                    <p className="text-xs text-red-600">{uploadError}</p>
+                  )}
+                  {d.image && !uploading && (
+                    <p className="truncate text-xs text-ink-500" title={d.image}>
+                      {d.image}
+                    </p>
+                  )}
+                </div>
+              </div>
             </L>
+
             <L label="Name (EN)">
               <input
                 value={d.nameEn}
@@ -377,7 +487,7 @@ function ProductEditor({
           </button>
           <button
             onClick={submit}
-            disabled={saving}
+            disabled={saving || uploading}
             className="inline-flex h-10 items-center gap-2 rounded-xl bg-ink-900 px-4 text-sm font-medium text-white hover:bg-ink-800 disabled:opacity-60"
           >
             <Icon name="Save" size={16} />

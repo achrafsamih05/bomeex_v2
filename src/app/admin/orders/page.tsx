@@ -74,13 +74,28 @@ export default function OrdersAdminPage() {
           })}
         </div>
 
+        {/*
+         * Responsive orders table:
+         *   - overflow-x-auto lets the whole table scroll horizontally
+         *     instead of overflowing the viewport on small screens.
+         *   - min-w-[820px] on the table preserves column readability
+         *     while scrolling.
+         *   - Customer / Date columns are hidden on mobile; essentials
+         *     (Order id, Total, Status) remain, with the order id cell
+         *     folding the customer name + date underneath for context.
+         */}
         <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-soft">
-          <table className="min-w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] text-sm">
             <thead className="bg-ink-50 text-ink-600">
               <tr>
                 <th className="px-4 py-3 text-start font-medium">Order</th>
-                <th className="px-4 py-3 text-start font-medium">Customer</th>
-                <th className="px-4 py-3 text-start font-medium">Date</th>
+                <th className="hidden px-4 py-3 text-start font-medium md:table-cell">
+                  Customer
+                </th>
+                <th className="hidden px-4 py-3 text-start font-medium lg:table-cell">
+                  Date
+                </th>
                 <th className="px-4 py-3 text-end font-medium">Total</th>
                 <th className="px-4 py-3 text-start font-medium">Status</th>
                 <th className="px-4 py-3" />
@@ -90,14 +105,20 @@ export default function OrdersAdminPage() {
               {filtered.map((o) => (
                 <Fragment key={o.id}>
                   <tr className="hover:bg-ink-50/50">
-                    <td className="px-4 py-3 font-medium">{o.id}</td>
                     <td className="px-4 py-3">
+                      <div className="font-medium">{o.id}</div>
+                      {/* Mobile: tuck customer + date under the id. */}
+                      <div className="mt-0.5 text-xs text-ink-500 md:hidden">
+                        {o.customer.name} · {formatDate(o.createdAt, locale)}
+                      </div>
+                    </td>
+                    <td className="hidden px-4 py-3 md:table-cell">
                       <div className="font-medium">{o.customer.name}</div>
                       <div className="text-xs text-ink-500">
                         {o.customer.email}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-ink-600">
+                    <td className="hidden px-4 py-3 text-ink-600 lg:table-cell">
                       {formatDate(o.createdAt, locale)}
                     </td>
                     <td className="px-4 py-3 text-end font-semibold">
@@ -187,7 +208,8 @@ export default function OrdersAdminPage() {
                 </tr>
               )}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </div>
     </AdminShell>
