@@ -351,14 +351,51 @@ export async function getUserByEmail(email: string): Promise<User | null> {
 }
 
 export async function createUser(u: User): Promise<User> {
-  const row = userToRow(u);
+  // Build a MINIMAL insert payload. We only send the columns that are
+  // absolutely required to create a working account, and we let Postgres
+  // defaults fill in the rest (created_at, banned = false, last_seen_at = null).
+  //
+  // Why not just .insert(userToRow(u))?
+  //   - If a column in the schema is renamed / dropped / added, sending the
+  //     full row breaks registration until someone edits this file. Sending
+  //     only the required columns keeps registration resilient.
+  //   - The real column name for shipping fields is whatever the schema
+  //     declares — we pass them only if the user supplied them and let the DB
+  //     reject any that don't exist with a clear error (surfaced via raise()).
+  //
+  // Columns we assume exist on `users` (see supabase/schema.sql):
+  //   id, email, name, role, password_hash, plus optional
+  //   phone / address / city / postal_code / country.
+  //
+  // If your table uses `full_name` instead of `name` (or any other rename),
+  // change the key below — that's the single line that has to match.
+  const required: Record<string, unknown> = {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    password_hash: u.passwordHash,
+  };
+
+  // Optional shipping-profile columns. We only include keys the caller gave
+  // us, so a schema that doesn't have e.g. `postal_code` won't cause Supabase
+  // to reject the insert for sending `postal_code: null`.
+  const optional: Record<string, unknown> = {};
+  if (u.phone !== undefined) optional.phone = u.phone;
+  if (u.address !== undefined) optional.address = u.address;
+  if (u.city !== undefined) optional.city = u.city;
+  if (u.postalCode !== undefined) optional.postal_code = u.postalCode;
+  if (u.country !== undefined) optional.country = u.country;
+
+  const payload = { ...required, ...optional };
+
   // .select().single() returns the persisted row — which is what we want the
   // API to reply with, so the client sees exactly what the DB stored. That
   // way schema drift (missing columns, RLS policy rejections, etc.) surfaces
   // immediately as a real error instead of a silent no-op.
   const { data, error } = await write()
     .from("users")
-    .insert(row)
+    .insert(payload)
     .select()
     .single();
   if (error) raise("createUser", error);
