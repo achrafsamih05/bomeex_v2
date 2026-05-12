@@ -16,8 +16,7 @@ export interface Product {
   sku: string;
   name: LocalizedString;
   description: LocalizedString;
-  price: number; // in smallest unit is fine, but for demo we use decimals
-  currency: "USD";
+  price: number;
   categoryId: string;
   stock: number;
   image: string;
@@ -37,14 +36,20 @@ export type OrderStatus =
   | "delivered"
   | "cancelled";
 
+export interface ShippingAddress {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city?: string;
+  postalCode?: string;
+  country?: string;
+}
+
 export interface Order {
   id: string;
-  customer: {
-    name: string;
-    email: string;
-    address: string;
-    phone: string;
-  };
+  userId?: string;
+  customer: ShippingAddress;
   items: {
     productId: string;
     name: string;
@@ -66,4 +71,32 @@ export interface Invoice {
   dueAt: string;
   status: "paid" | "unpaid" | "overdue";
   amount: number;
+}
+
+export type UserRole = "customer" | "admin";
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  phone?: string;
+  address?: string;
+  city?: string;
+  postalCode?: string;
+  country?: string;
+  banned: boolean;
+  passwordHash: string;
+  createdAt: string;
+  lastSeenAt?: string;
+}
+
+// Exposed to clients — never includes passwordHash.
+export type PublicUser = Omit<User, "passwordHash">;
+
+export interface Settings {
+  storeName: string;
+  currency: string; // ISO 4217
+  taxRate: number; // percent, e.g. 10
+  lowStockThreshold: number;
 }

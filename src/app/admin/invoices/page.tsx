@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Icon } from "@/components/ui/Icon";
+import {
+  useInvoices,
+  useOrders,
+  useSettings,
+} from "@/lib/client/hooks";
+import { apiSend } from "@/lib/client/api";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useI18n } from "@/lib/useI18n";
 import type { Invoice, Order } from "@/lib/types";
@@ -16,34 +22,17 @@ const STATUS_TONE: Record<Invoice["status"], string> = {
 
 export default function InvoicesAdminPage() {
   const { t, locale } = useI18n();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const { data: invoices, reload } = useInvoices();
+  const { data: orders } = useOrders();
+  const settings = useSettings();
+  const currency = settings?.currency ?? "USD";
   const [viewing, setViewing] = useState<Invoice | null>(null);
 
-  async function load() {
-    const [invRes, ordRes] = await Promise.all([
-      fetch("/api/invoices", { cache: "no-store" }),
-      fetch("/api/orders", { cache: "no-store" }),
-    ]);
-    const invJson = await invRes.json();
-    const ordJson = await ordRes.json();
-    setInvoices(invJson.data);
-    setOrders(ordJson.data);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
   async function togglePaid(inv: Invoice) {
-    await fetch(`/api/invoices/${inv.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status: inv.status === "paid" ? "unpaid" : "paid",
-      }),
+    await apiSend(`/api/invoices/${inv.id}`, "PATCH", {
+      status: inv.status === "paid" ? "unpaid" : "paid",
     });
-    await load();
+    await reload();
   }
 
   const linkedOrder = (inv: Invoice) =>
@@ -57,7 +46,7 @@ export default function InvoicesAdminPage() {
             {t("admin.invoices")}
           </h1>
           <p className="text-sm text-ink-500">
-            Generate and review digital invoices for every order.
+            Digital invoices are auto-generated at checkout.
           </p>
         </header>
 
@@ -86,7 +75,7 @@ export default function InvoicesAdminPage() {
                     {formatDate(inv.dueAt, locale)}
                   </td>
                   <td className="px-4 py-3 text-end font-semibold">
-                    {formatCurrency(inv.amount, locale)}
+                    {formatCurrency(inv.amount, locale, currency)}
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -134,6 +123,7 @@ export default function InvoicesAdminPage() {
         <InvoiceModal
           invoice={viewing}
           order={linkedOrder(viewing)}
+          currency={currency}
           onClose={() => setViewing(null)}
         />
       )}
@@ -144,10 +134,12 @@ export default function InvoicesAdminPage() {
 function InvoiceModal({
   invoice,
   order,
+  currency,
   onClose,
 }: {
   invoice: Invoice;
   order?: Order;
+  currency: string;
   onClose: () => void;
 }) {
   const { locale } = useI18n();
@@ -212,10 +204,10 @@ function InvoiceModal({
                     <td className="px-3 py-2">{it.name}</td>
                     <td className="px-3 py-2 text-end">{it.quantity}</td>
                     <td className="px-3 py-2 text-end">
-                      {formatCurrency(it.price, locale)}
+                      {formatCurrency(it.price, locale, currency)}
                     </td>
                     <td className="px-3 py-2 text-end font-medium">
-                      {formatCurrency(it.price * it.quantity, locale)}
+                      {formatCurrency(it.price * it.quantity, locale, currency)}
                     </td>
                   </tr>
                 ))}
@@ -226,15 +218,15 @@ function InvoiceModal({
           <section className="space-y-1 text-sm">
             <div className="flex justify-between text-ink-600">
               <span>Subtotal</span>
-              <span>{formatCurrency(order?.subtotal ?? 0, locale)}</span>
+              <span>{formatCurrency(order?.subtotal ?? 0, locale, currency)}</span>
             </div>
             <div className="flex justify-between text-ink-600">
               <span>Tax</span>
-              <span>{formatCurrency(order?.tax ?? 0, locale)}</span>
+              <span>{formatCurrency(order?.tax ?? 0, locale, currency)}</span>
             </div>
             <div className="flex justify-between pt-1 text-base font-semibold">
               <span>Total</span>
-              <span>{formatCurrency(invoice.amount, locale)}</span>
+              <span>{formatCurrency(invoice.amount, locale, currency)}</span>
             </div>
           </section>
         </div>

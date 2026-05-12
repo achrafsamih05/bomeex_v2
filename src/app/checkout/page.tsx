@@ -3,19 +3,29 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { StoreShell } from "@/components/storefront/StoreShell";
 import { Icon } from "@/components/ui/Icon";
-import { products } from "@/lib/db";
+import { useMe, useProducts, useSettings } from "@/lib/client/hooks";
+import { apiSend } from "@/lib/client/api";
 import { formatCurrency } from "@/lib/format";
 import { useCart } from "@/lib/store/cart";
 import { useI18n } from "@/lib/useI18n";
 
 export default function CheckoutPage() {
   const { t, locale } = useI18n();
+  const router = useRouter();
   const items = useCart((s) => s.items);
   const clear = useCart((s) => s.clear);
+  const { data: products } = useProducts();
+  const { data: me } = useMe();
+  const settings = useSettings();
+  const currency = settings?.currency ?? "USD";
+  const taxRate = settings?.taxRate ?? 10;
+
   const [done, setDone] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const lines = useMemo(
     () =>
@@ -25,42 +35,57 @@ export default function CheckoutPage() {
           return p ? { product: p, quantity: i.quantity } : null;
         })
         .filter((x): x is NonNullable<typeof x> => !!x),
-    [items]
+    [items, products]
   );
 
   const subtotal = lines.reduce(
     (s, { product, quantity }) => s + product.price * quantity,
     0
   );
-  const tax = +(subtotal * 0.1).toFixed(2);
+  const tax = +(subtotal * (taxRate / 100)).toFixed(2);
   const total = +(subtotal + tax).toFixed(2);
+
+  const hasProfileAddress = Boolean(me?.address && me?.phone);
+
+  async function placeWithProfile() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const order = await apiSend<{ id: string }>("/api/orders", "POST", {
+        useProfile: true,
+        items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      });
+      setDone(order.id);
+      clear();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
+    setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customer: {
-            name: String(data.get("name") ?? ""),
-            email: String(data.get("email") ?? ""),
-            phone: String(data.get("phone") ?? ""),
-            address: String(data.get("address") ?? ""),
-          },
-          items: items.map((i) => ({
-            productId: i.productId,
-            quantity: i.quantity,
-          })),
-        }),
+      const order = await apiSend<{ id: string }>("/api/orders", "POST", {
+        customer: {
+          name: String(data.get("name") ?? ""),
+          email: String(data.get("email") ?? ""),
+          phone: String(data.get("phone") ?? ""),
+          address: String(data.get("address") ?? ""),
+        },
+        items: items.map((i) => ({
+          productId: i.productId,
+          quantity: i.quantity,
+        })),
       });
-      const json = await res.json();
-      if (res.ok) {
-        setDone(json.data.id);
-        clear();
-      }
+      setDone(order.id);
+      clear();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
     } finally {
       setSubmitting(false);
     }
@@ -114,16 +139,79 @@ export default function CheckoutPage() {
           <h1 className="mb-5 text-2xl font-semibold tracking-tight">
             {t("checkout.title")}
           </h1>
+
+          {me && hasProfileAddress && (
+            <div className="mb-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="grid h-9 w-9 place-items-center rounded-full bg-emerald-600 text-white">
+                  <Icon name="ShieldCheck" size={16} />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-ink-900">
+                    {t("checkout.oneClick.title")}
+                  </div>
+                  <p className="mt-0.5 text-xs text-ink-600">
+                    {me.name} · {me.email} ·{" "}
+                    {[me.address, me.city, me.postalCode, me.country]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </p>
+                </div>
+                <button
+                  onClick={placeWithProfile}
+                  disabled={submitting}
+                  className="inline-flex h-10 items-center rounded-xl bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {submitting ? "…" : t("checkout.oneClick.cta")}
+                </button>
+              </div>
+              <p className="mt-3 text-center text-xs text-ink-500">
+                {t("checkout.or")}
+              </p>
+            </div>
+          )}
+
+          {!me && (
+            <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-ink-100 bg-ink-50 p-4 text-sm">
+              <span className="text-ink-700">
+                {t("checkout.signInHint")}
+              </span>
+              <button
+                onClick={() => router.push(`/login?next=${encodeURIComponent("/checkout")}`)}
+                className="inline-flex h-9 items-center rounded-lg bg-ink-900 px-3 text-xs font-medium text-white hover:bg-ink-800"
+              >
+                {t("auth.signIn")}
+              </button>
+            </div>
+          )}
+
           <form onSubmit={onSubmit} className="space-y-4">
-            <Field label={t("checkout.name")} name="name" required />
+            <Field label={t("checkout.name")} name="name" required defaultValue={me?.name} />
             <Field
               label={t("checkout.email")}
               name="email"
               type="email"
               required
+              defaultValue={me?.email}
             />
-            <Field label={t("checkout.phone")} name="phone" type="tel" />
-            <Field label={t("checkout.address")} name="address" required />
+            <Field label={t("checkout.phone")} name="phone" type="tel" defaultValue={me?.phone} />
+            <Field
+              label={t("checkout.address")}
+              name="address"
+              required
+              defaultValue={
+                me?.address
+                  ? [me.address, me.city, me.postalCode, me.country]
+                      .filter(Boolean)
+                      .join(", ")
+                  : undefined
+              }
+            />
+            {error && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </p>
+            )}
             <button
               type="submit"
               disabled={submitting}
@@ -155,15 +243,15 @@ export default function CheckoutPage() {
                   <div className="text-ink-500">×{quantity}</div>
                 </div>
                 <div className="text-sm font-semibold">
-                  {formatCurrency(product.price * quantity, locale)}
+                  {formatCurrency(product.price * quantity, locale, currency)}
                 </div>
               </li>
             ))}
           </ul>
           <div className="mt-4 space-y-2 border-t border-ink-100 pt-4 text-sm">
-            <SummaryRow label={t("cart.subtotal")} value={formatCurrency(subtotal, locale)} />
-            <SummaryRow label={t("cart.tax")} value={formatCurrency(tax, locale)} />
-            <SummaryRow label={t("cart.total")} value={formatCurrency(total, locale)} bold />
+            <SummaryRow label={t("cart.subtotal")} value={formatCurrency(subtotal, locale, currency)} />
+            <SummaryRow label={`${t("cart.tax").replace(/\(.*\)/, `(${taxRate}%)`)}`} value={formatCurrency(tax, locale, currency)} />
+            <SummaryRow label={t("cart.total")} value={formatCurrency(total, locale, currency)} bold />
           </div>
         </aside>
       </div>
@@ -176,11 +264,13 @@ function Field({
   name,
   type = "text",
   required,
+  defaultValue,
 }: {
   label: string;
   name: string;
   type?: string;
   required?: boolean;
+  defaultValue?: string;
 }) {
   return (
     <label className="block">
@@ -189,6 +279,7 @@ function Field({
         name={name}
         type={type}
         required={required}
+        defaultValue={defaultValue}
         className="h-11 w-full rounded-xl border border-ink-200 bg-white px-3 text-sm transition focus:border-ink-900 focus:outline-none"
       />
     </label>

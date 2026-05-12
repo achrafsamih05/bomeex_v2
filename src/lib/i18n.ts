@@ -75,6 +75,22 @@ export const messages: Dict = {
   "checkout.phone": { en: "Phone", ar: "الهاتف", fr: "Téléphone" },
   "checkout.address": { en: "Shipping address", ar: "عنوان الشحن", fr: "Adresse de livraison" },
   "checkout.place": { en: "Place order", ar: "تأكيد الطلب", fr: "Passer la commande" },
+  "checkout.or": { en: "— or enter shipping details below —", ar: "— أو أدخل تفاصيل الشحن أدناه —", fr: "— ou saisissez les détails ci-dessous —" },
+  "checkout.oneClick.title": {
+    en: "One-click order with your saved profile",
+    ar: "اطلب بنقرة واحدة باستخدام ملفك المحفوظ",
+    fr: "Commande en un clic avec votre profil enregistré",
+  },
+  "checkout.oneClick.cta": {
+    en: "Confirm order",
+    ar: "تأكيد الطلب",
+    fr: "Confirmer",
+  },
+  "checkout.signInHint": {
+    en: "Sign in for one-click checkout.",
+    ar: "سجّل الدخول للدفع بنقرة واحدة.",
+    fr: "Connectez-vous pour une commande en un clic.",
+  },
   "checkout.success.title": { en: "Order placed", ar: "تم تأكيد الطلب", fr: "Commande confirmée" },
   "checkout.success.body": {
     en: "Thanks! You'll receive an invoice by email shortly.",
@@ -82,11 +98,58 @@ export const messages: Dict = {
     fr: "Merci ! Vous recevrez une facture par e-mail sous peu.",
   },
 
+  // Auth
+  "auth.signIn": { en: "Sign in", ar: "تسجيل الدخول", fr: "Se connecter" },
+  "auth.signOut": { en: "Sign out", ar: "تسجيل الخروج", fr: "Se déconnecter" },
+  "auth.register": { en: "Create account", ar: "إنشاء حساب", fr: "Créer un compte" },
+  "auth.password": { en: "Password", ar: "كلمة المرور", fr: "Mot de passe" },
+  "auth.email": { en: "Email", ar: "البريد الإلكتروني", fr: "E-mail" },
+  "auth.haveAccount": {
+    en: "Already have an account?",
+    ar: "هل لديك حساب بالفعل؟",
+    fr: "Vous avez déjà un compte ?",
+  },
+  "auth.needAccount": {
+    en: "Don't have an account yet?",
+    ar: "ليس لديك حساب بعد؟",
+    fr: "Pas encore de compte ?",
+  },
+  "auth.admin.title": { en: "Admin sign in", ar: "دخول المدير", fr: "Connexion admin" },
+  "auth.admin.subtitle": {
+    en: "This area is restricted. Only administrators can sign in.",
+    ar: "هذه المنطقة محدودة. يمكن للمدراء فقط تسجيل الدخول.",
+    fr: "Zone restreinte. Seuls les administrateurs peuvent se connecter.",
+  },
+  "auth.user.title": { en: "Welcome back", ar: "مرحبًا بعودتك", fr: "Bon retour" },
+  "auth.user.subtitle": {
+    en: "Sign in to manage your orders and check out in one click.",
+    ar: "سجّل الدخول لإدارة طلباتك والشراء بنقرة واحدة.",
+    fr: "Connectez-vous pour gérer vos commandes et payer en un clic.",
+  },
+
+  // Register
+  "register.title": { en: "Create your account", ar: "أنشئ حسابك", fr: "Créez votre compte" },
+  "register.subtitle": {
+    en: "Save your shipping details once and check out in a single click.",
+    ar: "احفظ تفاصيل الشحن مرة واحدة واشترِ بنقرة واحدة.",
+    fr: "Enregistrez votre adresse une fois, et commandez en un clic.",
+  },
+  "register.fullName": { en: "Full name", ar: "الاسم الكامل", fr: "Nom complet" },
+  "register.phone": { en: "Phone", ar: "الهاتف", fr: "Téléphone" },
+  "register.address": { en: "Street address", ar: "عنوان الشارع", fr: "Adresse" },
+  "register.city": { en: "City", ar: "المدينة", fr: "Ville" },
+  "register.postalCode": { en: "Postal code", ar: "الرمز البريدي", fr: "Code postal" },
+  "register.country": { en: "Country", ar: "البلد", fr: "Pays" },
+
   // Account
   "account.title": { en: "Your account", ar: "حسابك", fr: "Votre compte" },
   "account.prefs": { en: "Preferences", ar: "التفضيلات", fr: "Préférences" },
   "account.language": { en: "Language", ar: "اللغة", fr: "Langue" },
   "account.signedInAs": { en: "Signed in as", ar: "مسجل الدخول باسم", fr: "Connecté en tant que" },
+  "account.shipping": { en: "Shipping profile", ar: "ملف الشحن", fr: "Profil de livraison" },
+  "account.save": { en: "Save profile", ar: "حفظ الملف", fr: "Enregistrer" },
+  "account.saved": { en: "Profile saved.", ar: "تم حفظ الملف.", fr: "Profil enregistré." },
+  "account.orders": { en: "Recent orders", ar: "أحدث الطلبات", fr: "Commandes récentes" },
 
   // Admin
   "admin.title": { en: "Admin", ar: "الإدارة", fr: "Admin" },
@@ -94,6 +157,7 @@ export const messages: Dict = {
   "admin.inventory": { en: "Inventory", ar: "المخزون", fr: "Inventaire" },
   "admin.orders": { en: "Orders", ar: "الطلبات", fr: "Commandes" },
   "admin.invoices": { en: "Invoices", ar: "الفواتير", fr: "Factures" },
+  "admin.users": { en: "Users", ar: "المستخدمون", fr: "Utilisateurs" },
   "admin.settings": { en: "Settings", ar: "الإعدادات", fr: "Paramètres" },
 };
 

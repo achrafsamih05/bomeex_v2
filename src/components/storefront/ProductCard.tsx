@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { Icon } from "../ui/Icon";
 import { useCart } from "@/lib/store/cart";
+import { useSettings } from "@/lib/client/hooks";
 import { formatCurrency } from "@/lib/format";
 import { useI18n } from "@/lib/useI18n";
 import type { Product } from "@/lib/types";
@@ -11,6 +12,8 @@ import { cn } from "@/lib/utils";
 export function ProductCard({ product }: { product: Product }) {
   const { t, locale } = useI18n();
   const addItem = useCart((s) => s.addItem);
+  const settings = useSettings();
+  const currency = settings?.currency ?? "USD";
   const outOfStock = product.stock <= 0;
 
   return (
@@ -39,7 +42,7 @@ export function ProductCard({ product }: { product: Product }) {
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <span className="text-base font-semibold tracking-tight sm:text-lg">
-            {formatCurrency(product.price, locale)}
+            {formatCurrency(product.price, locale, currency)}
           </span>
           <span
             className={cn(

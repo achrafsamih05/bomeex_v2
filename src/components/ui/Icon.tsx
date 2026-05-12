@@ -37,10 +37,18 @@ import {
   ArrowRight,
   ArrowLeft,
   AlertCircle,
+  LogOut,
+  LogIn,
+  ShieldCheck,
+  Users,
+  UserX,
+  Ban,
+  RefreshCw,
+  Mail,
+  Lock,
   type LucideIcon,
 } from "lucide-react";
 
-// Central registry so we can reference icons by name (e.g. from the DB).
 export const ICONS: Record<string, LucideIcon> = {
   ShoppingBag,
   ShoppingCart,
@@ -78,6 +86,15 @@ export const ICONS: Record<string, LucideIcon> = {
   ArrowRight,
   ArrowLeft,
   AlertCircle,
+  LogOut,
+  LogIn,
+  ShieldCheck,
+  Users,
+  UserX,
+  Ban,
+  RefreshCw,
+  Mail,
+  Lock,
 };
 
 export function Icon({

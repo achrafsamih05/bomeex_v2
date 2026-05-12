@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
-import { invoices } from "@/lib/db";
+import { listInvoices } from "@/lib/server/db";
+import { getCurrentUser } from "@/lib/server/auth";
 
-// GET /api/invoices
+// GET /api/invoices — admin only.
 export async function GET() {
-  return NextResponse.json({ data: invoices });
+  const user = await getCurrentUser();
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return NextResponse.json({ data: await listInvoices() });
 }
