@@ -155,6 +155,7 @@ export const messages: Dict = {
   "admin.title": { en: "Admin", ar: "الإدارة", fr: "Admin" },
   "admin.dashboard": { en: "Dashboard", ar: "لوحة التحكم", fr: "Tableau de bord" },
   "admin.inventory": { en: "Inventory", ar: "المخزون", fr: "Inventaire" },
+  "admin.categories": { en: "Categories", ar: "التصنيفات", fr: "Catégories" },
   "admin.orders": { en: "Orders", ar: "الطلبات", fr: "Commandes" },
   "admin.invoices": { en: "Invoices", ar: "الفواتير", fr: "Factures" },
   "admin.users": { en: "Users", ar: "المستخدمون", fr: "Utilisateurs" },

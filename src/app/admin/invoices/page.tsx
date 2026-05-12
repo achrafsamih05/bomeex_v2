@@ -50,14 +50,29 @@ export default function InvoicesAdminPage() {
           </p>
         </header>
 
+        {/*
+         * Responsive invoices table:
+         *   - overflow-x-auto wrapper + min-w-[820px] table keeps every
+         *     column readable while allowing horizontal scroll on phones.
+         *   - Order / Issued / Due columns fold away on mobile; the
+         *     invoice number cell folds the order id + issued date under
+         *     itself so the data is still reachable.
+         */}
         <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-soft">
-          <table className="min-w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] text-sm">
             <thead className="bg-ink-50 text-ink-600">
               <tr>
                 <th className="px-4 py-3 text-start font-medium">Invoice</th>
-                <th className="px-4 py-3 text-start font-medium">Order</th>
-                <th className="px-4 py-3 text-start font-medium">Issued</th>
-                <th className="px-4 py-3 text-start font-medium">Due</th>
+                <th className="hidden px-4 py-3 text-start font-medium md:table-cell">
+                  Order
+                </th>
+                <th className="hidden px-4 py-3 text-start font-medium lg:table-cell">
+                  Issued
+                </th>
+                <th className="hidden px-4 py-3 text-start font-medium lg:table-cell">
+                  Due
+                </th>
                 <th className="px-4 py-3 text-end font-medium">Amount</th>
                 <th className="px-4 py-3 text-start font-medium">Status</th>
                 <th className="px-4 py-3" />
@@ -66,12 +81,20 @@ export default function InvoicesAdminPage() {
             <tbody className="divide-y divide-ink-100">
               {invoices.map((inv) => (
                 <tr key={inv.id} className="hover:bg-ink-50/50">
-                  <td className="px-4 py-3 font-medium">{inv.number}</td>
-                  <td className="px-4 py-3 text-ink-600">{inv.orderId}</td>
-                  <td className="px-4 py-3 text-ink-600">
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{inv.number}</div>
+                    {/* Mobile: fold order id + issued date under the number. */}
+                    <div className="mt-0.5 text-xs text-ink-500 md:hidden">
+                      {inv.orderId} · {formatDate(inv.issuedAt, locale)}
+                    </div>
+                  </td>
+                  <td className="hidden px-4 py-3 text-ink-600 md:table-cell">
+                    {inv.orderId}
+                  </td>
+                  <td className="hidden px-4 py-3 text-ink-600 lg:table-cell">
                     {formatDate(inv.issuedAt, locale)}
                   </td>
-                  <td className="px-4 py-3 text-ink-600">
+                  <td className="hidden px-4 py-3 text-ink-600 lg:table-cell">
                     {formatDate(inv.dueAt, locale)}
                   </td>
                   <td className="px-4 py-3 text-end font-semibold">
@@ -115,7 +138,8 @@ export default function InvoicesAdminPage() {
                 </tr>
               )}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </div>
 
