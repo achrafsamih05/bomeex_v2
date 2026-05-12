@@ -366,9 +366,6 @@ export async function createUser(u: User): Promise<User> {
   // Columns we assume exist on `users` (see supabase/schema.sql):
   //   id, email, name, role, password_hash, plus optional
   //   phone / address / city / postal_code / country.
-  //
-  // If your table uses `full_name` instead of `name` (or any other rename),
-  // change the key below — that's the single line that has to match.
   const required: Record<string, unknown> = {
     id: u.id,
     email: u.email,
