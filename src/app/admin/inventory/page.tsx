@@ -191,7 +191,14 @@ export default function InventoryPage() {
                           <img
                             src={p.image}
                             alt=""
-                            className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                            className="h-10 w-10 shrink-0 rounded-lg object-cover bg-ink-100"
+                            onError={(e) => {
+                              // eslint-disable-next-line no-console
+                              console.error(
+                                `[InventoryTable] image failed for product ${p.id} (${p.sku}). URL: ${p.image}`
+                              );
+                              e.currentTarget.src = "/favicon.svg";
+                            }}
                           />
                           <div className="min-w-0">
                             <div className="truncate font-medium">
@@ -395,6 +402,13 @@ function ProductEditor({
                       src={d.image}
                       alt="Preview"
                       className="h-full w-full object-cover"
+                      onError={(e) => {
+                        // eslint-disable-next-line no-console
+                        console.error(
+                          `[ProductEditor] preview image failed to load. URL: ${d.image}`
+                        );
+                        e.currentTarget.src = "/favicon.svg";
+                      }}
                     />
                   ) : (
                     <Icon name="Package" size={22} />
