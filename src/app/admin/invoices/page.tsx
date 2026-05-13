@@ -20,6 +20,18 @@ const STATUS_TONE: Record<Invoice["status"], string> = {
   overdue: "bg-red-50 text-red-700",
 };
 
+/**
+ * Opens the dedicated A4 print view in a new tab. We use target="_blank"
+ * instead of window.print() on the list page so the admin:
+ *   - gets a full-page preview before committing to print,
+ *   - can keep the list open and print multiple invoices in parallel,
+ *   - sees the proper "Save as PDF" option in the browser print dialog
+ *     (which honours the @page size: A4 rule defined on the print page).
+ */
+function printUrl(invoice: Invoice) {
+  return `/admin/invoices/${invoice.id}/print`;
+}
+
 export default function InvoicesAdminPage() {
   const { t, locale } = useI18n();
   const { data: invoices, reload } = useInvoices();
@@ -116,13 +128,25 @@ export default function InvoicesAdminPage() {
                         onClick={() => setViewing(inv)}
                         className="grid h-8 w-8 place-items-center rounded-lg text-ink-600 hover:bg-ink-100"
                         aria-label="View"
+                        title="View"
                       >
                         <Icon name="FileText" size={16} />
                       </button>
+                      <a
+                        href={printUrl(inv)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-ink-600 hover:bg-ink-100"
+                        aria-label={t("invoice.print")}
+                        title={t("invoice.print")}
+                      >
+                        <Icon name="Printer" size={16} />
+                      </a>
                       <button
                         onClick={() => togglePaid(inv)}
                         className="grid h-8 w-8 place-items-center rounded-lg text-ink-600 hover:bg-emerald-50 hover:text-emerald-600"
                         aria-label="Toggle paid"
+                        title="Toggle paid"
                       >
                         <Icon name="CheckCircle2" size={16} />
                       </button>
@@ -166,7 +190,7 @@ function InvoiceModal({
   currency: string;
   onClose: () => void;
 }) {
-  const { locale } = useI18n();
+  const { t, locale } = useI18n();
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4 animate-fade-in">
       <div className="absolute inset-0 bg-ink-950/40" onClick={onClose} />
@@ -255,15 +279,25 @@ function InvoiceModal({
           </section>
         </div>
         <footer className="flex justify-end gap-2 border-t border-ink-100 p-4">
-          <button
-            onClick={() => window.print()}
-            className="h-10 rounded-xl border border-ink-200 bg-white px-4 text-sm font-medium text-ink-700 hover:border-ink-300"
+          {/*
+           * Opens the dedicated A4 print template in a new tab. This is the
+           * "Print Invoice" flow requested in the spec: a professional,
+           * corporate layout with the store logo, customer block, line
+           * items table, and Thank-you footer — all tuned for A4 via the
+           * print page's @page and @media print rules.
+           */}
+          <a
+            href={printUrl(invoice)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-ink-900 px-4 text-sm font-medium text-white hover:bg-ink-800"
           >
-            Print / PDF
-          </button>
+            <Icon name="Printer" size={16} />
+            {t("invoice.print")}
+          </a>
           <button
             onClick={onClose}
-            className="h-10 rounded-xl bg-ink-900 px-4 text-sm font-medium text-white hover:bg-ink-800"
+            className="h-10 rounded-xl border border-ink-200 bg-white px-4 text-sm font-medium text-ink-700 hover:border-ink-300"
           >
             Close
           </button>

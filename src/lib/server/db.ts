@@ -540,6 +540,16 @@ export async function getSettings(): Promise<Settings> {
       currency: "USD",
       taxRate: 10,
       lowStockThreshold: 20,
+      contactEmail: "",
+      contactPhone: "",
+      address: "",
+      footerTagline: "",
+      facebookUrl: "",
+      instagramUrl: "",
+      twitterUrl: "",
+      youtubeUrl: "",
+      linkedinUrl: "",
+      tiktokUrl: "",
     };
   }
   return settingsFromRow(data as unknown as SettingsRow);
