@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useProducts } from "@/lib/client/hooks";
 import { ProductCard } from "./ProductCard";
+import { QuickViewModal } from "./QuickViewModal";
 import { useI18n } from "@/lib/useI18n";
+import type { Product } from "@/lib/types";
 
 export function ProductGrid() {
   const { t, locale } = useI18n();
@@ -12,6 +14,12 @@ export function ProductGrid() {
   const category = params.get("category") ?? "all";
   const q = (params.get("q") ?? "").toLowerCase().trim();
   const { data: products, loading } = useProducts();
+
+  // Modal lives at the grid level (not per-card) so there's only ever one
+  // overlay in the DOM, and the Escape / backdrop handlers don't have to
+  // fight each other. We hold the full Product so the modal stays rendered
+  // with the correct data even if `products` reorders underneath us.
+  const [quickView, setQuickView] = useState<Product | null>(null);
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -53,9 +61,20 @@ export function ProductGrid() {
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
           {filtered.map((p) => (
-            <ProductCard key={p.id} product={p} />
+            <ProductCard
+              key={p.id}
+              product={p}
+              onQuickView={() => setQuickView(p)}
+            />
           ))}
         </div>
+      )}
+
+      {quickView && (
+        <QuickViewModal
+          product={quickView}
+          onClose={() => setQuickView(null)}
+        />
       )}
     </section>
   );

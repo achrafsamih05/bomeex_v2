@@ -45,7 +45,14 @@ create table products (
   currency        text not null default 'USD',
   category_id     text not null references categories(id) on delete restrict,
   stock           integer not null default 0 check (stock >= 0),
+  -- Legacy single cover URL. Kept for backward compatibility; the
+  -- `products_sync_image_cover` BEFORE trigger keeps it in sync with
+  -- `images[1]` on every write.
   image           text not null,
+  -- Canonical multi-image gallery. Element 0 is the cover. All new code
+  -- paths (admin inventory, Quick View modal, product page) read from
+  -- this column.
+  images          text[] not null default '{}',
   rating          numeric(3, 2) not null default 0 check (rating between 0 and 5),
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
@@ -53,6 +60,11 @@ create table products (
 create index on products (category_id);
 create index on products (created_at desc);
 ```
+
+> **Migration:** existing projects can pick up the `images text[]` column via
+> `supabase/multi-image-migration.sql`. The script is idempotent: it adds the
+> column, backfills it from the legacy `image` column, and installs the
+> `products_sync_image_cover` trigger that keeps the two in sync thereafter.
 
 ### `users`
 

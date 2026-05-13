@@ -46,6 +46,7 @@ import {
   RefreshCw,
   Mail,
   Lock,
+  Eye,
   type LucideIcon,
 } from "lucide-react";
 
@@ -95,6 +96,7 @@ export const ICONS: Record<string, LucideIcon> = {
   RefreshCw,
   Mail,
   Lock,
+  Eye,
 };
 
 export function Icon({

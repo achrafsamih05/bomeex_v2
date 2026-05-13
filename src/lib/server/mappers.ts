@@ -39,7 +39,7 @@ import type {
 
 export const PRODUCT_COLUMNS =
   "id, sku, name_en, name_ar, name_fr, description_en, description_ar, description_fr, " +
-  "price, category_id, stock, image, rating, created_at";
+  "price, category_id, stock, image, images, rating, created_at";
 
 export const CATEGORY_COLUMNS =
   "id, slug, name_en, name_ar, name_fr, icon";
@@ -140,11 +140,58 @@ export interface ProductRow {
   category_id: string;
   stock: number | string;
   image: string | null;
+  /**
+   * text[] column on Postgres. Supabase returns it as a JS array of strings,
+   * or null when the column is missing / NULL. Older rows seeded before the
+   * multi-image migration may not have this — the mapper falls back to the
+   * single `image` column so the storefront keeps rendering.
+   */
+  images: string[] | null;
   rating: number | string | null;
   created_at: string;
 }
 
+/**
+ * Normalise whatever Supabase returns for `images` into a clean string[].
+ *
+ * - If `images` is a valid non-empty array → dedupe + trim + drop empties.
+ * - Otherwise fall back to `image` (legacy single-URL rows seeded before
+ *   the multi-image migration).
+ * - Otherwise return [PLACEHOLDER_IMAGE] so the UI always has something
+ *   to render.
+ *
+ * Downstream code can therefore rely on `product.images[0]` always being a
+ * usable URL.
+ */
+function normaliseImages(
+  images: string[] | null | undefined,
+  legacy: string | null | undefined
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (val: unknown) => {
+    if (typeof val !== "string") return;
+    const trimmed = val.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    out.push(trimmed);
+  };
+
+  if (Array.isArray(images)) {
+    for (const v of images) push(v);
+  }
+  // Always fold the legacy `image` value into the list so rows that haven't
+  // been migrated yet (images IS NULL) still render. If it's already the first
+  // element of `images`, the `seen` set dedupes it.
+  push(legacy);
+
+  if (out.length === 0) out.push(PLACEHOLDER_IMAGE);
+  return out;
+}
+
 export function productFromRow(r: ProductRow): Product {
+  const images = normaliseImages(r.images, r.image);
   return {
     id: r.id,
     sku: r.sku,
@@ -158,7 +205,10 @@ export function productFromRow(r: ProductRow): Product {
     price: num(r.price),
     categoryId: r.category_id,
     stock: num(r.stock),
-    image: firstNonEmpty(r.image) || PLACEHOLDER_IMAGE,
+    images,
+    // Cover image is always the first gallery entry. Keeps `product.image`
+    // a single source of truth for small thumbnails, cart rows, etc.
+    image: images[0],
     rating: Math.max(0, Math.min(5, num(r.rating, 0))),
     createdAt: r.created_at,
   };
@@ -184,7 +234,28 @@ export function productToRow(p: Partial<Product>): Partial<ProductRow> {
   if (p.price !== undefined) row.price = p.price;
   if (p.categoryId !== undefined) row.category_id = p.categoryId;
   if (p.stock !== undefined) row.stock = p.stock;
-  if (p.image !== undefined) row.image = p.image;
+
+  // Multi-image write path. Whenever the caller provides `images`, we write
+  // BOTH the array and the legacy `image` column so the schema stays usable
+  // for old code paths that still read `image`. If only `image` is given
+  // (legacy callers), we mirror it into `images` so the row satisfies the
+  // multi-image contract.
+  if (p.images !== undefined) {
+    const clean = (p.images ?? [])
+      .map((u) => (typeof u === "string" ? u.trim() : ""))
+      .filter((u) => u.length > 0);
+    row.images = clean;
+    if (row.image === undefined) {
+      row.image = clean[0] ?? p.image ?? "";
+    }
+  }
+  if (p.image !== undefined) {
+    row.image = p.image;
+    if (row.images === undefined) {
+      row.images = p.image ? [p.image] : [];
+    }
+  }
+
   if (p.rating !== undefined) row.rating = p.rating;
   if (p.createdAt !== undefined) row.created_at = p.createdAt;
   return row;

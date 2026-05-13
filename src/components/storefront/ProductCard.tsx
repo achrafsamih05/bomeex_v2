@@ -15,7 +15,18 @@ import { cn } from "@/lib/utils";
 // itself trigger the fallback.
 const FALLBACK_IMAGE = "/favicon.svg";
 
-export function ProductCard({ product }: { product: Product }) {
+export function ProductCard({
+  product,
+  onQuickView,
+}: {
+  product: Product;
+  /**
+   * Fired when the user activates the card itself (click / Enter / Space)
+   * or the explicit "Quick view" hover button. The grid owns the modal
+   * state, so the card just reports the intent.
+   */
+  onQuickView?: () => void;
+}) {
   const { t, locale } = useI18n();
   const addItem = useCart((s) => s.addItem);
   const settings = useSettings();
@@ -23,21 +34,17 @@ export function ProductCard({ product }: { product: Product }) {
   const outOfStock = product.stock <= 0;
 
   // ---------------------------------------------------------------------------
-  // Image handling.
-  //   - We try the value from `products.image` first.
-  //   - On the FIRST load failure we log the offending URL (so you can paste
-  //     it into a new tab / curl it) and swap in the local fallback image.
-  //   - We also swap to `unoptimized` rendering on failure. next/image's
-  //     optimiser is the single biggest source of "broken icon" reports —
-  //     if the Supabase host wasn't in remotePatterns, the optimiser returns
-  //     a 400 and the <img> breaks. Retrying unoptimised bypasses that path
-  //     entirely and proves whether the URL itself is reachable.
+  // Image handling (unchanged from the pre-Quick-View version).
+  //   - Try `products.image` (which is always `images[0]` after normalisation).
+  //   - On the first failure, log the offending URL and swap in the local
+  //     fallback image, rendered `unoptimized` to bypass next/image's host
+  //     whitelist and prove the real URL is reachable.
   // ---------------------------------------------------------------------------
   const [imgSrc, setImgSrc] = useState<string>(product.image || FALLBACK_IMAGE);
   const [failed, setFailed] = useState(false);
 
   function onImageError() {
-    if (failed) return; // already fell back, don't loop
+    if (failed) return;
     // eslint-disable-next-line no-console
     console.error(
       `[ProductCard] image failed to load for product ${product.id} (${product.sku}). ` +
@@ -50,17 +57,48 @@ export function ProductCard({ product }: { product: Product }) {
     setFailed(true);
   }
 
+  function handleActivate() {
+    onQuickView?.();
+  }
+
+  // Keyboard activation of the card surface (Enter / Space). We render the
+  // card as a <div role="button"> instead of a <button> because we still
+  // want a real nested <button> for the cart CTA, and nesting buttons is
+  // invalid HTML.
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Enter" || e.key === " ") {
+      // Only activate when the card surface itself has focus, not when the
+      // key was pressed inside the Add-to-Cart button. Otherwise the
+      // button's own click handler plus ours both fire.
+      if (e.currentTarget === e.target) {
+        e.preventDefault();
+        handleActivate();
+      }
+    }
+  }
+
   return (
-    <article className="group flex flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-soft transition hover:shadow-lift">
+    <article
+      role={onQuickView ? "button" : undefined}
+      tabIndex={onQuickView ? 0 : undefined}
+      aria-label={
+        onQuickView
+          ? `${product.name[locale]} — ${t("product.quickView")}`
+          : undefined
+      }
+      onClick={onQuickView ? handleActivate : undefined}
+      onKeyDown={onQuickView ? onKeyDown : undefined}
+      className={cn(
+        "group flex flex-col overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-soft transition hover:shadow-lift",
+        onQuickView && "cursor-pointer focus:outline-none focus:ring-2 focus:ring-ink-900/60"
+      )}
+    >
       <div className="relative aspect-square w-full overflow-hidden bg-ink-50">
         <Image
           src={imgSrc}
           alt={product.name[locale]}
           fill
           sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 20vw"
-          // When the optimised request fails we fall back to unoptimised so
-          // the browser hits the URL directly and we can see the real status
-          // in DevTools.
           unoptimized={failed}
           onError={onImageError}
           className="object-cover transition duration-500 group-hover:scale-105"
@@ -69,6 +107,29 @@ export function ProductCard({ product }: { product: Product }) {
           <Icon name="Star" size={12} className="text-amber-500" />
           {product.rating.toFixed(1)}
         </div>
+
+        {/* Small hint pill announcing multi-image products — a light
+            "+N" indicator so shoppers know there's more to see in the
+            Quick View. Only visible when the gallery has more than one
+            entry. */}
+        {product.images.length > 1 && (
+          <div className="absolute top-2 end-2 inline-flex items-center gap-1 rounded-full bg-ink-900/80 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">
+            <Icon name="LayoutGrid" size={10} />+{product.images.length - 1}
+          </div>
+        )}
+
+        {/* Quick View affordance on hover/focus. Pointer-events-none on the
+            parent absolute layer keeps the hit-target on the underlying card
+            (so the whole card is clickable), and we lift just the button
+            itself with pointer-events-auto. */}
+        {onQuickView && (
+          <div className="pointer-events-none absolute inset-0 flex items-end justify-center p-3 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+            <span className="pointer-events-none inline-flex items-center gap-1 rounded-full bg-white/95 px-3 py-1 text-xs font-medium text-ink-800 shadow-soft backdrop-blur">
+              <Icon name="Eye" size={12} />
+              {t("product.quickView")}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-3 sm:p-4">
@@ -93,9 +154,23 @@ export function ProductCard({ product }: { product: Product }) {
           </span>
         </div>
 
+        {/*
+         * Add-to-cart stays as a separate, explicit action. We stop the
+         * click from bubbling so it doesn't also open the Quick View — the
+         * CTA is for shoppers who already know what they want; the card
+         * surface (everywhere else) is for shoppers who want more detail.
+         */}
         <button
           disabled={outOfStock}
-          onClick={() => addItem(product.id, 1)}
+          onClick={(e) => {
+            e.stopPropagation();
+            addItem(product.id, 1);
+          }}
+          onKeyDown={(e) => {
+            // Also prevent Enter/Space on the button from triggering the
+            // card's keyboard handler above.
+            if (e.key === "Enter" || e.key === " ") e.stopPropagation();
+          }}
           className="mt-2 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-ink-900 text-sm font-medium text-white transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:bg-ink-300"
         >
           <Icon name="Plus" size={16} />

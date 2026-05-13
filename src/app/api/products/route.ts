@@ -43,6 +43,25 @@ export const POST = (req: NextRequest) =>
       httpError(400, "name, price, and categoryId are required");
     }
     const id = await nextProductId();
+    // Normalise image input: accept either `images: string[]` (new multi-
+    // image path), `image: string` (legacy single-URL callers), or neither
+    // (fall back to a placeholder).
+    const imagesIn = Array.isArray(body.images)
+      ? body.images.filter(
+          (u): u is string => typeof u === "string" && u.trim().length > 0
+        )
+      : [];
+    const coverIn =
+      typeof body.image === "string" && body.image.trim().length > 0
+        ? body.image.trim()
+        : undefined;
+    const gallery =
+      imagesIn.length > 0
+        ? imagesIn
+        : coverIn
+        ? [coverIn]
+        : ["https://picsum.photos/seed/nova/800/800"];
+
     const product: Product = {
       id,
       sku: body.sku ?? `NVA-${Date.now()}`,
@@ -53,7 +72,8 @@ export const POST = (req: NextRequest) =>
       price: Number(body.price),
       categoryId: body.categoryId!,
       stock: Number(body.stock ?? 0),
-      image: body.image ?? "https://picsum.photos/seed/nova/800/800",
+      images: gallery,
+      image: gallery[0],
       rating: Number(body.rating ?? 4.5),
       createdAt: new Date().toISOString(),
     };

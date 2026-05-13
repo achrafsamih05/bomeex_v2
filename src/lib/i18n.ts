@@ -55,6 +55,11 @@ export const messages: Dict = {
   "product.add": { en: "Add to cart", ar: "أضف إلى السلة", fr: "Ajouter au panier" },
   "product.outOfStock": { en: "Out of stock", ar: "غير متوفر", fr: "Rupture de stock" },
   "product.inStock": { en: "In stock", ar: "متوفر", fr: "En stock" },
+  "product.quickView": { en: "Quick view", ar: "عرض سريع", fr: "Aperçu rapide" },
+  "product.quantity": { en: "Quantity", ar: "الكمية", fr: "Quantité" },
+  "product.previousImage": { en: "Previous image", ar: "الصورة السابقة", fr: "Image précédente" },
+  "product.nextImage": { en: "Next image", ar: "الصورة التالية", fr: "Image suivante" },
+  "product.close": { en: "Close", ar: "إغلاق", fr: "Fermer" },
 
   // Cart
   "cart.title": { en: "Your cart", ar: "سلة التسوق", fr: "Votre panier" },
