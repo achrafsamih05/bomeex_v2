@@ -27,16 +27,16 @@ export const messages: Dict = {
   "nav.admin": { en: "Admin", ar: "الإدارة", fr: "Admin" },
 
   // Storefront
-  "brand.name": { en: "Nova", ar: "نوفا", fr: "Nova" },
+  "brand.name": { en: "BOM➜X", ar: "BOM➜X", fr: "BOM➜X" },
   "hero.title": {
     en: "Thoughtfully curated. Delivered fast.",
     ar: "مختارة بعناية. تصل بسرعة.",
     fr: "Soigneusement sélectionné. Livré vite.",
   },
   "hero.subtitle": {
-    en: "Discover essentials across electronics, home, fashion and more.",
-    ar: "اكتشف الأساسيات في الإلكترونيات والمنزل والأزياء وأكثر.",
-    fr: "Découvrez l'essentiel en électronique, maison, mode et plus.",
+    en: "Explore a wide range of plumbing supplies, hardware, and professional tools.",
+    ar: "استكشف تشكيلة واسعة من لوازم السباكة، الأجهزة، والعدد المهنية.",
+    fr: "Explorez une large gamme de fournitures de plomberie, quincaillerie et outils pro.",
   },
   "search.placeholder": {
     en: "Search products, brands, categories…",
