@@ -88,8 +88,44 @@ alter table public.products
   add column if not exists category_id     text,
   add column if not exists stock           integer default 0,
   add column if not exists image           text,
+  add column if not exists images          text[] default '{}',
   add column if not exists rating          numeric(3, 2) default 0,
   add column if not exists created_at      timestamptz default now();
+
+-- Backfill images[] from the legacy single-URL `image` column for any row
+-- that pre-existed before the multi-image migration. Idempotent: a row
+-- that already has entries is skipped.
+update public.products
+   set images = array[image]
+ where (images is null or cardinality(images) = 0)
+   and image is not null
+   and length(trim(image)) > 0;
+
+-- Keep image cover ↔ images[1] consistent on every write. See
+-- supabase/multi-image-migration.sql for the full rationale.
+create or replace function public.products_sync_image_cover()
+returns trigger
+language plpgsql
+as $$
+begin
+  if (new.images is not null and cardinality(new.images) > 0)
+     and (new.image is null or length(trim(new.image)) = 0)
+  then
+    new.image := new.images[1];
+  end if;
+  if (new.image is not null and length(trim(new.image)) > 0)
+     and (new.images is null or cardinality(new.images) = 0)
+  then
+    new.images := array[new.image];
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists products_sync_image_cover on public.products;
+create trigger products_sync_image_cover
+  before insert or update on public.products
+  for each row execute function public.products_sync_image_cover();
 
 create index if not exists products_category_id_idx on public.products (category_id);
 create index if not exists products_created_at_idx  on public.products (created_at desc);
@@ -278,7 +314,8 @@ select 'categories columns' as check,
 
 select 'products columns'   as check,
        count(*) filter (where column_name = 'name_en')     as has_name_en,
-       count(*) filter (where column_name = 'category_id') as has_category_id
+       count(*) filter (where column_name = 'category_id') as has_category_id,
+       count(*) filter (where column_name = 'images')      as has_images
   from information_schema.columns
  where table_schema = 'public' and table_name = 'products';
 

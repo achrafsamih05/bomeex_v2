@@ -19,6 +19,18 @@ export interface Product {
   price: number;
   categoryId: string;
   stock: number;
+  /**
+   * Full list of product image URLs (gallery). Always present — mappers
+   * normalize legacy single-URL rows into a one-element array so consumers
+   * never have to branch on "old" vs "new" shape.
+   */
+  images: string[];
+  /**
+   * Convenience cover image. Always equals `images[0]` when images are
+   * present; kept as a separate field so legacy callers (thumbnails,
+   * small listings, third-party integrations) don't need to touch the
+   * array.
+   */
   image: string;
   rating: number;
   createdAt: string;

@@ -10,6 +10,24 @@ import { useI18n } from "@/lib/useI18n";
 import type { Product } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+// ---------------------------------------------------------------------------
+// Admin inventory
+//
+// Now manages a full product image GALLERY (text[] column `images`) instead
+// of a single URL. The first entry is the cover; the storefront Quick View
+// renders the rest as an image carousel.
+//
+// The editor supports:
+//   - multi-file upload (calls /api/upload sequentially, one URL per file)
+//   - drag-free reordering via explicit left/right arrow buttons (keeps the
+//     implementation lightweight — no extra dependency for DnD)
+//   - removing a single image
+//   - "Make cover" action that moves any image to position 0
+//
+// On submit we send `images: string[]`. The API route + DB trigger keep the
+// legacy `image` column in sync with `images[0]`.
+// ---------------------------------------------------------------------------
+
 interface DraftProduct {
   id?: string;
   sku: string;
@@ -22,7 +40,7 @@ interface DraftProduct {
   price: number;
   categoryId: string;
   stock: number;
-  image: string;
+  images: string[];
 }
 
 export default function InventoryPage() {
@@ -45,7 +63,7 @@ export default function InventoryPage() {
     price: 0,
     categoryId: categories[0]?.id ?? "",
     stock: 0,
-    image: "",
+    images: [],
   };
 
   const filtered = useMemo(() => {
@@ -69,11 +87,13 @@ export default function InventoryPage() {
       price: p.price,
       categoryId: p.categoryId,
       stock: p.stock,
-      image: p.image,
+      // Product already normalises single-URL legacy rows into images[].
+      images: [...p.images],
     };
   }
 
   async function save(d: DraftProduct) {
+    const gallery = d.images.filter((u) => u && u.trim().length > 0);
     const payload = {
       sku: d.sku,
       name: { en: d.nameEn, ar: d.nameAr, fr: d.nameFr },
@@ -81,7 +101,14 @@ export default function InventoryPage() {
       price: Number(d.price),
       categoryId: d.categoryId,
       stock: Number(d.stock),
-      image: d.image || "https://picsum.photos/seed/nova/800/800",
+      // Send the new canonical field. The API route also accepts legacy
+      // `image`; we send both so a partially-migrated DB (images column
+      // present but trigger not installed) stays consistent.
+      images: gallery.length > 0
+        ? gallery
+        : ["https://picsum.photos/seed/nova/800/800"],
+      image:
+        gallery[0] ?? "https://picsum.photos/seed/nova/800/800",
     };
     if (d.id) {
       await apiSend(`/api/products/${d.id}`, "PATCH", payload);
@@ -133,13 +160,9 @@ export default function InventoryPage() {
         </div>
 
         {/*
-         * Responsive table wrapper:
-         *   - overflow-x-auto lets narrow screens scroll the table
-         *     horizontally instead of squashing cells.
-         *   - min-w-[720px] on the inner <table> keeps columns readable
-         *     during that horizontal scroll.
-         *   - Non-essential columns (SKU, Category, Price) are hidden
-         *     below md; only Product / Stock / actions remain on mobile.
+         * Responsive table wrapper. See README for why we keep a minimum
+         * width instead of collapsing to cards — admin workflows benefit
+         * from the dense tabular view.
          */}
         <div className="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-soft">
           <div className="overflow-x-auto">
@@ -187,24 +210,33 @@ export default function InventoryPage() {
                     <tr key={p.id} className="hover:bg-ink-50/50">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={p.image}
-                            alt=""
-                            className="h-10 w-10 shrink-0 rounded-lg object-cover bg-ink-100"
-                            onError={(e) => {
-                              // eslint-disable-next-line no-console
-                              console.error(
-                                `[InventoryTable] image failed for product ${p.id} (${p.sku}). URL: ${p.image}`
-                              );
-                              e.currentTarget.src = "/favicon.svg";
-                            }}
-                          />
+                          {/* Cover thumbnail + a small badge with the
+                              gallery size, so the admin can tell at a
+                              glance which products have multiple shots. */}
+                          <div className="relative h-10 w-10 shrink-0">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={p.image}
+                              alt=""
+                              className="h-10 w-10 rounded-lg object-cover bg-ink-100"
+                              onError={(e) => {
+                                // eslint-disable-next-line no-console
+                                console.error(
+                                  `[InventoryTable] image failed for product ${p.id} (${p.sku}). URL: ${p.image}`
+                                );
+                                e.currentTarget.src = "/favicon.svg";
+                              }}
+                            />
+                            {p.images.length > 1 && (
+                              <span className="absolute -end-1 -bottom-1 grid h-4 min-w-4 place-items-center rounded-full bg-ink-900 px-1 text-[10px] font-semibold leading-none text-white">
+                                {p.images.length}
+                              </span>
+                            )}
+                          </div>
                           <div className="min-w-0">
                             <div className="truncate font-medium">
                               {p.name[locale]}
                             </div>
-                            {/* Mobile: fold SKU + price under the name. */}
                             <div className="mt-0.5 text-xs text-ink-500 md:hidden">
                               {p.sku} ·{" "}
                               {formatCurrency(p.price, locale, currency)}
@@ -287,9 +319,6 @@ function ProductEditor({
 }) {
   const [d, setD] = useState<DraftProduct>(draft);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function submit() {
     setSaving(true);
@@ -297,32 +326,6 @@ function ProductEditor({
       await onSave(d);
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadError(null);
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: form,
-        credentials: "same-origin",
-      });
-      const json = await res.json().catch(() => ({ error: "Invalid JSON" }));
-      if (!res.ok) throw new Error(json.error ?? `Upload failed (${res.status})`);
-      const url = (json.data as { url: string }).url;
-      setD((prev) => ({ ...prev, image: url }));
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setUploading(false);
-      // Reset so selecting the same file twice still fires onChange.
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -383,64 +386,16 @@ function ProductEditor({
             </L>
 
             {/*
-             * Image upload.
-             *   - File input (accept=image/*) replaces the old URL text field.
-             *   - On select, we POST to /api/upload which writes to the
-             *     `product-images` Supabase Storage bucket and returns the
-             *     public URL. That URL is stored on `d.image` and persisted
-             *     on save, exactly like the previous URL string.
-             *   - A small thumbnail previews whatever URL is currently set
-             *     (useful both after upload and when editing an existing
-             *     product).
+             * Image gallery editor. Accepts multiple files at once, uploads
+             * each sequentially, and appends the returned URLs to
+             * `d.images`. The first entry is the cover; the other entries
+             * show up in the Quick View carousel on the storefront.
              */}
-            <L label="Product image" wide>
-              <div className="flex items-start gap-3">
-                <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl border border-ink-200 bg-ink-50 text-ink-400">
-                  {d.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={d.image}
-                      alt="Preview"
-                      className="h-full w-full object-cover"
-                      onError={(e) => {
-                        // eslint-disable-next-line no-console
-                        console.error(
-                          `[ProductEditor] preview image failed to load. URL: ${d.image}`
-                        );
-                        e.currentTarget.src = "/favicon.svg";
-                      }}
-                    />
-                  ) : (
-                    <Icon name="Package" size={22} />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1 space-y-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={onFileSelected}
-                    disabled={uploading}
-                    className={cn(
-                      "block w-full text-sm text-ink-700",
-                      "file:me-3 file:rounded-lg file:border-0 file:bg-ink-900 file:px-3 file:py-2",
-                      "file:text-sm file:font-medium file:text-white hover:file:bg-ink-800",
-                      "disabled:opacity-60"
-                    )}
-                  />
-                  {uploading && (
-                    <p className="text-xs text-ink-500">Uploading…</p>
-                  )}
-                  {uploadError && (
-                    <p className="text-xs text-red-600">{uploadError}</p>
-                  )}
-                  {d.image && !uploading && (
-                    <p className="truncate text-xs text-ink-500" title={d.image}>
-                      {d.image}
-                    </p>
-                  )}
-                </div>
-              </div>
+            <L label="Product images" wide>
+              <ImageGalleryEditor
+                images={d.images}
+                onChange={(next) => setD({ ...d, images: next })}
+              />
             </L>
 
             <L label="Name (EN)">
@@ -501,13 +456,191 @@ function ProductEditor({
           </button>
           <button
             onClick={submit}
-            disabled={saving || uploading}
+            disabled={saving}
             className="inline-flex h-10 items-center gap-2 rounded-xl bg-ink-900 px-4 text-sm font-medium text-white hover:bg-ink-800 disabled:opacity-60"
           >
             <Icon name="Save" size={16} />
             {saving ? "Saving…" : "Save"}
           </button>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Gallery editor. Stateless from the outside — reads the current array and
+ * calls `onChange` with the next one for every mutation (upload, reorder,
+ * remove). This keeps the owning `DraftProduct` as the single source of
+ * truth so "Cancel" and "Save" behave predictably.
+ */
+function ImageGalleryEditor({
+  images,
+  onChange,
+}: {
+  images: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function uploadOne(file: File): Promise<string> {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: form,
+      credentials: "same-origin",
+    });
+    const json = await res.json().catch(() => ({ error: "Invalid JSON" }));
+    if (!res.ok) throw new Error(json.error ?? `Upload failed (${res.status})`);
+    return (json.data as { url: string }).url;
+  }
+
+  async function onFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setUploadError(null);
+    setUploading(true);
+    const added: string[] = [];
+    try {
+      // Sequential upload keeps the backend simple (one request at a time
+      // per admin) and gives us a predictable order: files land in the
+      // gallery in the same order the user picked them.
+      for (const file of files) {
+        added.push(await uploadOne(file));
+      }
+      onChange([...images, ...added]);
+    } catch (err) {
+      // Partial success is still committed so the admin doesn't lose work.
+      if (added.length > 0) onChange([...images, ...added]);
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function moveTo(from: number, to: number) {
+    if (to < 0 || to >= images.length || from === to) return;
+    const next = [...images];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    onChange(next);
+  }
+
+  function removeAt(index: number) {
+    onChange(images.filter((_, i) => i !== index));
+  }
+
+  function makeCover(index: number) {
+    if (index === 0) return;
+    moveTo(index, 0);
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Gallery grid — small thumbnails with per-item controls. */}
+      {images.length > 0 ? (
+        <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {images.map((url, i) => (
+            <li
+              key={`${url}-${i}`}
+              className="group relative aspect-square overflow-hidden rounded-xl border border-ink-200 bg-ink-50"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={`Product image ${i + 1}`}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  // eslint-disable-next-line no-console
+                  console.error(
+                    `[ImageGalleryEditor] preview failed. URL: ${url}`
+                  );
+                  e.currentTarget.src = "/favicon.svg";
+                }}
+              />
+              {i === 0 && (
+                <span className="absolute start-1 top-1 rounded-md bg-ink-900/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  Cover
+                </span>
+              )}
+              {/* Hover/focus overlay with actions. On touch devices the
+                  overlay stays visible (no hover), so admins can still
+                  reorder/remove on mobile. */}
+              <div className="absolute inset-0 flex flex-col justify-between bg-ink-950/0 p-1 transition group-hover:bg-ink-950/40 group-focus-within:bg-ink-950/40">
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => removeAt(i)}
+                    className="grid h-6 w-6 place-items-center rounded-full bg-white/90 text-ink-700 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 hover:text-red-600"
+                    aria-label="Remove image"
+                  >
+                    <Icon name="X" size={12} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+                  <button
+                    type="button"
+                    onClick={() => moveTo(i, i - 1)}
+                    disabled={i === 0}
+                    className="grid h-6 w-6 place-items-center rounded-full bg-white/90 text-ink-700 disabled:opacity-40"
+                    aria-label="Move left"
+                  >
+                    <Icon name="ChevronLeft" size={12} />
+                  </button>
+                  {i !== 0 && (
+                    <button
+                      type="button"
+                      onClick={() => makeCover(i)}
+                      className="rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-medium text-ink-700 hover:text-ink-900"
+                    >
+                      Cover
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => moveTo(i, i + 1)}
+                    disabled={i === images.length - 1}
+                    className="grid h-6 w-6 place-items-center rounded-full bg-white/90 text-ink-700 disabled:opacity-40"
+                    aria-label="Move right"
+                  >
+                    <Icon name="ChevronRight" size={12} />
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="grid h-28 place-items-center rounded-xl border border-dashed border-ink-200 bg-ink-50 text-xs text-ink-500">
+          No images yet — upload one or more below.
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={onFilesSelected}
+          disabled={uploading}
+          className={cn(
+            "block w-full text-sm text-ink-700",
+            "file:me-3 file:rounded-lg file:border-0 file:bg-ink-900 file:px-3 file:py-2",
+            "file:text-sm file:font-medium file:text-white hover:file:bg-ink-800",
+            "disabled:opacity-60"
+          )}
+        />
+        {uploading && <p className="text-xs text-ink-500">Uploading…</p>}
+        {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
+        <p className="text-xs text-ink-500">
+          First image becomes the cover. Drag-free reorder via the arrows on
+          each thumbnail.
+        </p>
       </div>
     </div>
   );

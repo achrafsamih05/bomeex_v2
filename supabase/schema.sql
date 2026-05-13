@@ -47,12 +47,45 @@ create table if not exists public.products (
   price           numeric(12, 2) not null check (price >= 0),
   category_id     text not null references public.categories(id) on delete restrict,
   stock           integer not null default 0 check (stock >= 0),
+  -- Legacy cover image. Kept for backward compatibility with older clients
+  -- that still read `image`. The `products_sync_image_cover` trigger below
+  -- keeps this in sync with `images[1]`.
   image           text not null,
+  -- Canonical multi-image gallery. Every new product carries an ordered
+  -- array of URLs; element 0 is the cover.
+  images          text[] not null default '{}',
   rating          numeric(3, 2) not null default 0 check (rating between 0 and 5),
   created_at      timestamptz not null default now()
 );
 create index if not exists products_category_id_idx on public.products (category_id);
 create index if not exists products_created_at_idx  on public.products (created_at desc);
+
+-- Keep the `image` cover and the `images[]` gallery in sync on every write.
+-- See supabase/multi-image-migration.sql for the full rationale. Replicated
+-- here so a brand-new project gets the same behaviour from day one.
+create or replace function public.products_sync_image_cover()
+returns trigger
+language plpgsql
+as $$
+begin
+  if (new.images is not null and cardinality(new.images) > 0)
+     and (new.image is null or length(trim(new.image)) = 0)
+  then
+    new.image := new.images[1];
+  end if;
+  if (new.image is not null and length(trim(new.image)) > 0)
+     and (new.images is null or cardinality(new.images) = 0)
+  then
+    new.images := array[new.image];
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists products_sync_image_cover on public.products;
+create trigger products_sync_image_cover
+  before insert or update on public.products
+  for each row execute function public.products_sync_image_cover();
 
 -- ---- users ----------------------------------------------------------------
 
