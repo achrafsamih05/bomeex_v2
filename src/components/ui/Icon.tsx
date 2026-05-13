@@ -47,6 +47,15 @@ import {
   Mail,
   Lock,
   Eye,
+  Phone,
+  MapPin,
+  Facebook,
+  Instagram,
+  Twitter,
+  Youtube,
+  Linkedin,
+  Music2,
+  Printer,
   type LucideIcon,
 } from "lucide-react";
 
@@ -97,6 +106,16 @@ export const ICONS: Record<string, LucideIcon> = {
   Mail,
   Lock,
   Eye,
+  Phone,
+  MapPin,
+  Facebook,
+  Instagram,
+  Twitter,
+  Youtube,
+  Linkedin,
+  // TikTok has no dedicated lucide icon; Music2 is the closest stand-in.
+  Music2,
+  Printer,
 };
 
 export function Icon({

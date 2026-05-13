@@ -165,6 +165,42 @@ export const messages: Dict = {
   "admin.invoices": { en: "Invoices", ar: "الفواتير", fr: "Factures" },
   "admin.users": { en: "Users", ar: "المستخدمون", fr: "Utilisateurs" },
   "admin.settings": { en: "Settings", ar: "الإعدادات", fr: "Paramètres" },
+
+  // Footer
+  "footer.contact": { en: "Contact", ar: "اتصل بنا", fr: "Contact" },
+  "footer.follow": { en: "Follow us", ar: "تابعنا", fr: "Suivez-nous" },
+  "footer.shop": { en: "Shop", ar: "المتجر", fr: "Boutique" },
+  "footer.rights": {
+    en: "All rights reserved.",
+    ar: "جميع الحقوق محفوظة.",
+    fr: "Tous droits réservés.",
+  },
+  "footer.call": { en: "Call", ar: "اتصل", fr: "Appeler" },
+  "footer.email": { en: "Email", ar: "البريد", fr: "E-mail" },
+  "footer.address": { en: "Address", ar: "العنوان", fr: "Adresse" },
+
+  // Invoice print
+  "invoice.title": { en: "Invoice", ar: "فاتورة", fr: "Facture" },
+  "invoice.billTo": { en: "Bill to", ar: "فاتورة إلى", fr: "Facturé à" },
+  "invoice.from": { en: "From", ar: "من", fr: "De" },
+  "invoice.number": { en: "Invoice no.", ar: "رقم الفاتورة", fr: "Facture n°" },
+  "invoice.issued": { en: "Issued", ar: "تاريخ الإصدار", fr: "Émise le" },
+  "invoice.due": { en: "Due", ar: "تاريخ الاستحقاق", fr: "Échéance" },
+  "invoice.status": { en: "Status", ar: "الحالة", fr: "Statut" },
+  "invoice.item": { en: "Item", ar: "المنتج", fr: "Article" },
+  "invoice.qty": { en: "Qty", ar: "الكمية", fr: "Qté" },
+  "invoice.unitPrice": { en: "Unit price", ar: "السعر", fr: "Prix unitaire" },
+  "invoice.lineTotal": { en: "Total", ar: "الإجمالي", fr: "Total" },
+  "invoice.subtotal": { en: "Subtotal", ar: "المجموع الفرعي", fr: "Sous-total" },
+  "invoice.tax": { en: "Tax", ar: "الضريبة", fr: "Taxe" },
+  "invoice.total": { en: "Grand total", ar: "الإجمالي الكلي", fr: "Total" },
+  "invoice.thankYou": {
+    en: "Thank you for shopping with us.",
+    ar: "شكراً لتسوقك معنا.",
+    fr: "Merci pour votre achat.",
+  },
+  "invoice.print": { en: "Print invoice", ar: "طباعة الفاتورة", fr: "Imprimer" },
+  "invoice.back": { en: "Back", ar: "رجوع", fr: "Retour" },
 };
 
 export function t(key: string, locale: Locale): string {

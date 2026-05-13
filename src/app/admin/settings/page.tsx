@@ -45,16 +45,20 @@ export default function AdminSettings() {
     }
   }
 
+  // Tiny typed field-setter keeps the individual input bindings tidy.
+  const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
+    setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+
   return (
     <AdminShell>
-      <div className="mx-auto max-w-2xl space-y-6">
+      <div className="mx-auto max-w-3xl space-y-6">
         <header>
           <h1 className="text-2xl font-semibold tracking-tight">
             {t("admin.settings")}
           </h1>
           <p className="text-sm text-ink-500">
             Global site configuration. Changes here update the storefront
-            instantly.
+            instantly — including the footer contact info and social links.
           </p>
         </header>
 
@@ -83,7 +87,7 @@ export default function AdminSettings() {
               <Field label="Store name">
                 <input
                   value={form.storeName}
-                  onChange={(e) => setForm({ ...form, storeName: e.target.value })}
+                  onChange={(e) => set("storeName", e.target.value)}
                   className={inputCls}
                   maxLength={64}
                   required
@@ -92,7 +96,7 @@ export default function AdminSettings() {
               <Field label="Currency">
                 <select
                   value={form.currency}
-                  onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                  onChange={(e) => set("currency", e.target.value)}
                   className={inputCls}
                 >
                   {CURRENCIES.map((c) => (
@@ -109,9 +113,7 @@ export default function AdminSettings() {
                   max={100}
                   step={0.1}
                   value={form.taxRate}
-                  onChange={(e) =>
-                    setForm({ ...form, taxRate: Number(e.target.value) })
-                  }
+                  onChange={(e) => set("taxRate", Number(e.target.value))}
                   className={inputCls}
                 />
               </Field>
@@ -121,9 +123,129 @@ export default function AdminSettings() {
                   min={0}
                   value={form.lowStockThreshold}
                   onChange={(e) =>
-                    setForm({ ...form, lowStockThreshold: Number(e.target.value) })
+                    set("lowStockThreshold", Number(e.target.value))
                   }
                   className={inputCls}
+                />
+              </Field>
+            </div>
+          </section>
+
+          {/* ----- Contact info (shows in the storefront footer) ----- */}
+          <section className="rounded-2xl border border-ink-100 bg-white p-5 shadow-soft">
+            <header className="mb-4">
+              <h2 className="text-base font-semibold">Contact & Footer</h2>
+              <p className="mt-0.5 text-xs text-ink-500">
+                These details appear in the storefront footer on every page.
+                Leave a field empty to hide it.
+              </p>
+            </header>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Contact email">
+                <input
+                  type="email"
+                  value={form.contactEmail}
+                  onChange={(e) => set("contactEmail", e.target.value)}
+                  className={inputCls}
+                  placeholder="hello@example.com"
+                  maxLength={128}
+                />
+              </Field>
+              <Field label="Contact phone">
+                <input
+                  type="tel"
+                  value={form.contactPhone}
+                  onChange={(e) => set("contactPhone", e.target.value)}
+                  className={inputCls}
+                  placeholder="+1 555 0100"
+                  maxLength={32}
+                />
+              </Field>
+              <Field label="Business address" className="md:col-span-2">
+                <input
+                  value={form.address}
+                  onChange={(e) => set("address", e.target.value)}
+                  className={inputCls}
+                  placeholder="123 Commerce Way, New York, NY"
+                  maxLength={200}
+                />
+              </Field>
+              <Field label="Footer tagline" className="md:col-span-2">
+                <input
+                  value={form.footerTagline}
+                  onChange={(e) => set("footerTagline", e.target.value)}
+                  className={inputCls}
+                  placeholder="A short tagline that appears under your store name"
+                  maxLength={200}
+                />
+              </Field>
+            </div>
+          </section>
+
+          {/* ----- Social media links ----- */}
+          <section className="rounded-2xl border border-ink-100 bg-white p-5 shadow-soft">
+            <header className="mb-4">
+              <h2 className="text-base font-semibold">Social media</h2>
+              <p className="mt-0.5 text-xs text-ink-500">
+                Paste the full URL. Only populated networks render a footer
+                icon; empty fields are hidden.
+              </p>
+            </header>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Facebook">
+                <input
+                  type="url"
+                  value={form.facebookUrl}
+                  onChange={(e) => set("facebookUrl", e.target.value)}
+                  className={inputCls}
+                  placeholder="https://facebook.com/your-store"
+                />
+              </Field>
+              <Field label="Instagram">
+                <input
+                  type="url"
+                  value={form.instagramUrl}
+                  onChange={(e) => set("instagramUrl", e.target.value)}
+                  className={inputCls}
+                  placeholder="https://instagram.com/your-store"
+                />
+              </Field>
+              <Field label="Twitter / X">
+                <input
+                  type="url"
+                  value={form.twitterUrl}
+                  onChange={(e) => set("twitterUrl", e.target.value)}
+                  className={inputCls}
+                  placeholder="https://twitter.com/your-store"
+                />
+              </Field>
+              <Field label="YouTube">
+                <input
+                  type="url"
+                  value={form.youtubeUrl}
+                  onChange={(e) => set("youtubeUrl", e.target.value)}
+                  className={inputCls}
+                  placeholder="https://youtube.com/@your-store"
+                />
+              </Field>
+              <Field label="LinkedIn">
+                <input
+                  type="url"
+                  value={form.linkedinUrl}
+                  onChange={(e) => set("linkedinUrl", e.target.value)}
+                  className={inputCls}
+                  placeholder="https://linkedin.com/company/your-store"
+                />
+              </Field>
+              <Field label="TikTok">
+                <input
+                  type="url"
+                  value={form.tiktokUrl}
+                  onChange={(e) => set("tiktokUrl", e.target.value)}
+                  className={inputCls}
+                  placeholder="https://tiktok.com/@your-store"
                 />
               </Field>
             </div>
@@ -183,12 +305,14 @@ const inputCls =
 function Field({
   label,
   children,
+  className,
 }: {
   label: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <label className="block">
+    <label className={cn("block", className)}>
       <span className="mb-1 block text-xs font-medium text-ink-600">{label}</span>
       {children}
     </label>

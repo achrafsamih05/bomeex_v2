@@ -111,4 +111,22 @@ export interface Settings {
   currency: string; // ISO 4217
   taxRate: number; // percent, e.g. 10
   lowStockThreshold: number;
+
+  // -- Contact + marketing fields that power the storefront <Footer />.
+  // All optional on the server (default ''), never null. Empty string means
+  // "hide this item in the footer" — the component treats any blank value
+  // as absent rather than rendering a dead link.
+  contactEmail: string;
+  contactPhone: string;
+  address: string;
+  footerTagline: string;
+
+  // Social media URLs. Stored as full absolute URLs so the footer can drop
+  // them straight into an <a href>. Blank = not shown.
+  facebookUrl: string;
+  instagramUrl: string;
+  twitterUrl: string;
+  youtubeUrl: string;
+  linkedinUrl: string;
+  tiktokUrl: string;
 }

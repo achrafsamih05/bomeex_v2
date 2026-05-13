@@ -59,7 +59,9 @@ export const INVOICE_COLUMNS =
   "id, order_id, number, issued_at, due_at, status, amount";
 
 export const SETTINGS_COLUMNS =
-  "id, store_name, currency, tax_rate, low_stock_threshold";
+  "id, store_name, currency, tax_rate, low_stock_threshold, " +
+  "contact_email, contact_phone, address, footer_tagline, " +
+  "facebook_url, instagram_url, twitter_url, youtube_url, linkedin_url, tiktok_url";
 
 // ============================================================================
 // Small utilities
@@ -430,6 +432,21 @@ export interface SettingsRow {
   currency: string;
   tax_rate: number | string;
   low_stock_threshold: number | string;
+  // Footer / contact fields — added by supabase/settings-footer-migration.sql.
+  // Schema defaults every column to empty string, so these are never null
+  // in a correctly migrated project. The `?` keeps the mapper resilient to
+  // older DBs where the migration hasn't been run yet — it falls back to
+  // "" instead of crashing on undefined.
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  address?: string | null;
+  footer_tagline?: string | null;
+  facebook_url?: string | null;
+  instagram_url?: string | null;
+  twitter_url?: string | null;
+  youtube_url?: string | null;
+  linkedin_url?: string | null;
+  tiktok_url?: string | null;
 }
 
 export function settingsFromRow(r: SettingsRow): Settings {
@@ -438,6 +455,16 @@ export function settingsFromRow(r: SettingsRow): Settings {
     currency: r.currency,
     taxRate: num(r.tax_rate, 10),
     lowStockThreshold: num(r.low_stock_threshold, 20),
+    contactEmail: r.contact_email ?? "",
+    contactPhone: r.contact_phone ?? "",
+    address: r.address ?? "",
+    footerTagline: r.footer_tagline ?? "",
+    facebookUrl: r.facebook_url ?? "",
+    instagramUrl: r.instagram_url ?? "",
+    twitterUrl: r.twitter_url ?? "",
+    youtubeUrl: r.youtube_url ?? "",
+    linkedinUrl: r.linkedin_url ?? "",
+    tiktokUrl: r.tiktok_url ?? "",
   };
 }
 
@@ -448,5 +475,15 @@ export function settingsToRow(s: Partial<Settings>): Partial<SettingsRow> {
   if (s.taxRate !== undefined) row.tax_rate = s.taxRate;
   if (s.lowStockThreshold !== undefined)
     row.low_stock_threshold = s.lowStockThreshold;
+  if (s.contactEmail !== undefined) row.contact_email = s.contactEmail;
+  if (s.contactPhone !== undefined) row.contact_phone = s.contactPhone;
+  if (s.address !== undefined) row.address = s.address;
+  if (s.footerTagline !== undefined) row.footer_tagline = s.footerTagline;
+  if (s.facebookUrl !== undefined) row.facebook_url = s.facebookUrl;
+  if (s.instagramUrl !== undefined) row.instagram_url = s.instagramUrl;
+  if (s.twitterUrl !== undefined) row.twitter_url = s.twitterUrl;
+  if (s.youtubeUrl !== undefined) row.youtube_url = s.youtubeUrl;
+  if (s.linkedinUrl !== undefined) row.linkedin_url = s.linkedinUrl;
+  if (s.tiktokUrl !== undefined) row.tiktok_url = s.tiktokUrl;
   return row;
 }
