@@ -62,7 +62,10 @@ export type OrderStatus =
 
 export interface ShippingAddress {
   name: string;
-  email: string;
+  /** Optional — guests can place orders without an email. Auth users get
+   *  their profile email auto-filled as readonly. */
+  email?: string;
+  /** Primary mandatory identifier for all orders (guest and auth). */
   phone: string;
   address: string;
   city?: string;

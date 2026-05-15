@@ -358,8 +358,8 @@ export interface OrderRow {
   id: string;
   user_id: string | null;
   customer_name: string;
-  customer_email: string;
-  customer_phone: string | null;
+  customer_email: string | null;
+  customer_phone: string;
   customer_address: string;
   subtotal: number | string;
   tax: number | string;
@@ -383,7 +383,7 @@ export function orderFromRow(r: OrderRow, items: OrderItemRow[]): Order {
     userId: r.user_id ?? undefined,
     customer: {
       name: r.customer_name,
-      email: r.customer_email,
+      email: r.customer_email ?? undefined,
       phone: r.customer_phone ?? "",
       address: r.customer_address,
     },

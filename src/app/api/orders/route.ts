@@ -55,8 +55,10 @@ export const POST = (req: NextRequest) =>
       };
     }
 
-    if (!customer?.email || !Array.isArray(items) || items.length === 0) {
-      httpError(400, "customer and non-empty items are required");
+    // Phone is the primary mandatory identifier. Email is optional (guests
+    // can order without one; auth users get it auto-filled from profile).
+    if (!customer?.phone || !customer?.name || !Array.isArray(items) || items.length === 0) {
+      httpError(400, "customer (name + phone) and non-empty items are required");
     }
 
     const orderItems: Order["items"] = [];
