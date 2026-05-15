@@ -74,10 +74,6 @@ function LoginForm() {
           {submitting ? "…" : t("auth.signIn")}
         </button>
       </form>
-      <div className="rounded-xl border border-ink-100 bg-ink-50/80 p-3 text-xs text-ink-600">
-        <div className="font-medium text-ink-700">Demo credentials</div>
-        <div>demo@nova.shop · demo1234</div>
-      </div>
       <p className="text-center text-xs text-ink-400">
         <Link href="/login/admin" className="hover:text-ink-600">
           Admin sign in →
