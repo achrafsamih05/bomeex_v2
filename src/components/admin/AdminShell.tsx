@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useState } from "react";
 import { Icon, ICONS } from "../ui/Icon";
+import { Toaster } from "../ui/Toaster";
 import { apiSend } from "@/lib/client/api";
 import { useMe } from "@/lib/client/hooks";
 import { useI18n } from "@/lib/useI18n";
@@ -28,6 +29,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     { href: "/admin/categories", label: t("admin.categories"), icon: "LayoutGrid" },
     { href: "/admin/orders", label: t("admin.orders"), icon: "Package" },
     { href: "/admin/invoices", label: t("admin.invoices"), icon: "FileText" },
+    { href: "/admin/expenses", label: t("admin.expenses"), icon: "TrendingUp" },
     { href: "/admin/users", label: t("admin.users"), icon: "Users" },
     { href: "/admin/settings", label: t("admin.settings"), icon: "Settings" },
   ];
@@ -149,6 +151,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
+
+      {/* Global toast rail — same component the storefront mounts. */}
+      <Toaster />
     </div>
   );
 }

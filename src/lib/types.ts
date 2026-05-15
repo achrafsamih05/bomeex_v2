@@ -16,7 +16,19 @@ export interface Product {
   sku: string;
   name: LocalizedString;
   description: LocalizedString;
+  /**
+   * Sale price — the amount the customer pays. Always >= 0.
+   */
   price: number;
+  /**
+   * Cost-of-goods price — what the store paid to acquire one unit. Used by
+   * the admin "Expenses & Profits" view to compute capital tied in stock and
+   * projected profit (`(price - purchasePrice) * stock`).
+   *
+   * Defaults to 0 when the schema migration hasn't been run yet, so the
+   * profit view simply shows zero margin instead of crashing.
+   */
+  purchasePrice: number;
   categoryId: string;
   stock: number;
   /**

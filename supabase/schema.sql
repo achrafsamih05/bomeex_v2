@@ -45,7 +45,14 @@ create table if not exists public.products (
   description_ar  text not null default '',
   description_fr  text not null default '',
   price           numeric(12, 2) not null check (price >= 0),
-  category_id     text not null references public.categories(id) on delete restrict,
+  -- Cost-of-goods price. Drives the admin "Expenses & Profits" view:
+  --   capital_tied = sum(purchase_price * stock)
+  --   projected_profit = sum((price - purchase_price) * stock)
+  -- Defaults to 0 so legacy rows that haven't been priced yet simply
+  -- contribute zero to the margin calculation rather than NULL-poisoning
+  -- the aggregates.
+  purchase_price  numeric(12, 2) not null default 0 check (purchase_price >= 0),
+  category_id     text not null references public.categories(id) on delete cascade,
   stock           integer not null default 0 check (stock >= 0),
   -- Legacy cover image. Kept for backward compatibility with older clients
   -- that still read `image`. The `products_sync_image_cover` trigger below
@@ -121,7 +128,7 @@ insert into public.settings (id) values (1) on conflict (id) do nothing;
 
 create table if not exists public.orders (
   id                text primary key,
-  user_id           text references public.users(id) on delete set null,
+  user_id           text references public.users(id) on delete cascade,
   customer_name     text not null,
   customer_email    text not null,
   customer_phone    text,
@@ -139,7 +146,7 @@ create index if not exists orders_user_id_idx    on public.orders (user_id);
 create table if not exists public.order_items (
   id          bigserial primary key,
   order_id    text not null references public.orders(id) on delete cascade,
-  product_id  text not null references public.products(id) on delete restrict,
+  product_id  text not null references public.products(id) on delete cascade,
   name        text not null,
   quantity    integer not null check (quantity > 0),
   price       numeric(12, 2) not null

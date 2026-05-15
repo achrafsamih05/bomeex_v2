@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../ui/Icon";
 import { useCart } from "@/lib/store/cart";
+import { toast } from "@/lib/store/toast";
 import { useSettings } from "@/lib/client/hooks";
 import { formatCurrency } from "@/lib/format";
 import { useI18n } from "@/lib/useI18n";
@@ -117,8 +118,13 @@ export function QuickViewModal({
   function onAddToCart() {
     if (outOfStock) return;
     addItem(product.id, quantity);
-    // The cart store auto-opens the side drawer. Closing the modal afterwards
-    // leaves the shopper with a clear next step (see the cart, check out).
+    // Cart drawer no longer auto-opens (see src/lib/store/cart.ts). We
+    // close the modal so the user is back in the catalog and surface a
+    // toast as silent confirmation. The cart icon in the Toolbar is the
+    // explicit "view cart" affordance.
+    toast.success(`${product.name[locale]} × ${quantity} added to cart`, {
+      icon: "ShoppingBag",
+    });
     onClose();
   }
 

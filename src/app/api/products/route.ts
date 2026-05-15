@@ -70,6 +70,11 @@ export const POST = (req: NextRequest) =>
         body.description ??
         ({ en: "", ar: "", fr: "" } as Product["description"]),
       price: Number(body.price),
+      // Cost-of-goods price. Coerce to a finite non-negative number; missing
+      // / NaN inputs default to 0 so the row still validates against the
+      // numeric(12,2) NOT NULL DEFAULT 0 column. The admin "Expenses &
+      // Profits" view reads this back to compute stock margin.
+      purchasePrice: Math.max(0, Number(body.purchasePrice ?? 0) || 0),
       categoryId: body.categoryId!,
       stock: Number(body.stock ?? 0),
       images: gallery,

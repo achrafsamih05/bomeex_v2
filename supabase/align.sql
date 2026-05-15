@@ -85,12 +85,21 @@ alter table public.products
   add column if not exists description_ar  text default '',
   add column if not exists description_fr  text default '',
   add column if not exists price           numeric(12, 2),
+  -- Cost-of-goods column. Powers the admin "Expenses & Profits" view.
+  -- Defaults to 0 so existing rows behave as "not priced yet" instead of
+  -- breaking aggregates with NULL.
+  add column if not exists purchase_price  numeric(12, 2) default 0,
   add column if not exists category_id     text,
   add column if not exists stock           integer default 0,
   add column if not exists image           text,
   add column if not exists images          text[] default '{}',
   add column if not exists rating          numeric(3, 2) default 0,
   add column if not exists created_at      timestamptz default now();
+
+-- Belt-and-braces: even if the column already existed without a default,
+-- backfill any NULLs with 0 so the NOT NULL constraint that schema.sql
+-- declares can be enforced safely on a re-run.
+update public.products set purchase_price = 0 where purchase_price is null;
 
 -- Backfill images[] from the legacy single-URL `image` column for any row
 -- that pre-existed before the multi-image migration. Idempotent: a row
@@ -297,8 +306,95 @@ select * from (values
 ) as v(id, slug, name_en, name_ar, name_fr, icon)
 on conflict (id) do nothing;
 
--- Sanity checks — the SELECTs below will return rows only if alignment is
--- complete. If any of these returns 0 rows, something is still off.
+-- ============================================================================
+-- FOREIGN KEY ALIGNMENT
+--
+-- The original schema used ON DELETE RESTRICT / SET NULL for several FKs that
+-- now need ON DELETE CASCADE so admins can actually remove a product or a
+-- user without the database raising 23503 errors.
+--
+-- Rules:
+--   - products.category_id     -> categories(id)   ON DELETE CASCADE
+--   - order_items.product_id   -> products(id)     ON DELETE CASCADE
+--   - orders.user_id           -> users(id)        ON DELETE CASCADE
+--   - order_items.order_id     -> orders(id)       ON DELETE CASCADE   (already)
+--   - invoices.order_id        -> orders(id)       ON DELETE CASCADE   (already)
+--
+-- We discover the existing constraint name dynamically (Postgres often picks
+-- "<table>_<column>_fkey") and replace it. Wrapped in DO blocks so the script
+-- stays idempotent: re-running is a no-op once the constraints are correct.
+-- ============================================================================
+
+do $$
+declare
+  cname text;
+begin
+  -- products.category_id -> categories(id)
+  select tc.constraint_name into cname
+  from information_schema.table_constraints tc
+  join information_schema.key_column_usage kcu
+       on tc.constraint_name = kcu.constraint_name
+      and tc.table_schema    = kcu.table_schema
+  where tc.table_schema = 'public'
+    and tc.table_name   = 'products'
+    and tc.constraint_type = 'FOREIGN KEY'
+    and kcu.column_name = 'category_id'
+  limit 1;
+  if cname is not null then
+    execute format('alter table public.products drop constraint %I', cname);
+  end if;
+  alter table public.products
+    add constraint products_category_id_fkey
+    foreign key (category_id) references public.categories(id) on delete cascade;
+end $$;
+
+do $$
+declare
+  cname text;
+begin
+  -- order_items.product_id -> products(id)
+  select tc.constraint_name into cname
+  from information_schema.table_constraints tc
+  join information_schema.key_column_usage kcu
+       on tc.constraint_name = kcu.constraint_name
+      and tc.table_schema    = kcu.table_schema
+  where tc.table_schema = 'public'
+    and tc.table_name   = 'order_items'
+    and tc.constraint_type = 'FOREIGN KEY'
+    and kcu.column_name = 'product_id'
+  limit 1;
+  if cname is not null then
+    execute format('alter table public.order_items drop constraint %I', cname);
+  end if;
+  alter table public.order_items
+    add constraint order_items_product_id_fkey
+    foreign key (product_id) references public.products(id) on delete cascade;
+end $$;
+
+do $$
+declare
+  cname text;
+begin
+  -- orders.user_id -> users(id)
+  select tc.constraint_name into cname
+  from information_schema.table_constraints tc
+  join information_schema.key_column_usage kcu
+       on tc.constraint_name = kcu.constraint_name
+      and tc.table_schema    = kcu.table_schema
+  where tc.table_schema = 'public'
+    and tc.table_name   = 'orders'
+    and tc.constraint_type = 'FOREIGN KEY'
+    and kcu.column_name = 'user_id'
+  limit 1;
+  if cname is not null then
+    execute format('alter table public.orders drop constraint %I', cname);
+  end if;
+  alter table public.orders
+    add constraint orders_user_id_fkey
+    foreign key (user_id) references public.users(id) on delete cascade;
+end $$;
+
+
 
 select 'users columns'      as check,
        count(*) filter (where column_name = 'name')           as has_name,

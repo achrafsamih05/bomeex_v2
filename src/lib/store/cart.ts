@@ -28,6 +28,21 @@ export const useCart = create<CartState>()(
       open: () => set({ isOpen: true }),
       close: () => set({ isOpen: false }),
       toggle: () => set({ isOpen: !get().isOpen }),
+      // -----------------------------------------------------------------
+      // addItem now NEVER auto-opens the cart drawer.
+      //
+      // Previous behaviour: every Add-to-Cart click flipped `isOpen` to
+      // true, yanking the user out of the catalog they were browsing into
+      // a full-screen drawer. UX feedback wanted a quieter confirmation,
+      // so the action is now silent — the calling component (ProductCard,
+      // QuickViewModal) is responsible for surfacing a toast instead.
+      //
+      // Users who want to see the cart still have:
+      //   - the cart icon in the Toolbar (calls `open()`),
+      //   - the BottomNav cart entry,
+      //   - and the explicit "Open cart" button in the toast itself
+      //     (clicking the toast triggers `open()` via the toast onClick).
+      // -----------------------------------------------------------------
       addItem: (productId, quantity = 1) =>
         set((s) => {
           const existing = s.items.find((i) => i.productId === productId);
@@ -38,12 +53,10 @@ export const useCart = create<CartState>()(
                   ? { ...i, quantity: i.quantity + quantity }
                   : i
               ),
-              isOpen: true,
             };
           }
           return {
             items: [...s.items, { productId, quantity }],
-            isOpen: true,
           };
         }),
       removeItem: (productId) =>
