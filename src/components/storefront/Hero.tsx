@@ -5,33 +5,25 @@ import { useI18n } from "@/lib/useI18n";
 export function Hero() {
   const { t } = useI18n();
   return (
-    <section className="relative overflow-hidden rounded-xl2 border border-slate-200 bg-slate-50 p-6 text-slate-900 shadow-soft sm:p-10">
-      {/* تأثيرات الإضاءة (العناصر الغامقة والملونة في الخلفية) */}
-      <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-brand-500/10 blur-3xl" />
-      <div className="absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-slate-900/5 blur-3xl" />
+    <section className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-4 text-slate-900 shadow-sm sm:p-6">
+      {/* تأثيرات إضاءة خفيفة جداً في الخلفية لتقليل التشتت */}
+      <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-brand-500/10 blur-2xl" />
       
-      <div className="relative max-w-2xl space-y-4">
-        {/* شارة صغيرة بلون غامق للتباين */}
-        <span className="inline-flex rounded-full bg-slate-900 px-3 py-1 text-xs font-medium tracking-wide text-white">
+      <div className="relative flex flex-col items-center text-center space-y-2">
+        {/* شارة صغيرة جداً */}
+        <span className="inline-flex rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-medium tracking-wide text-white uppercase">
           {t("brand.name")}
         </span>
         
-        {/* العنوان بلون غامق جداً (Slate-950) */}
-        <h1 className="text-3xl font-bold leading-tight tracking-tight text-slate-950 sm:text-5xl">
+        {/* عنوان بحجم أصغر (text-xl إلى text-3xl) */}
+        <h1 className="text-xl font-bold leading-tight tracking-tight text-slate-950 sm:text-3xl">
           {t("hero.title")}
         </h1>
         
-        {/* الوصف بلون رمادي متوسط للتباين الهادئ */}
-        <p className="max-w-lg text-sm text-slate-600 sm:text-lg">
+        {/* وصف مقتضب جداً وحجم خط صغير */}
+        <p className="max-w-md text-xs text-slate-600 sm:text-sm">
           {t("hero.subtitle")}
         </p>
-
-        {/* زر تجريبي (اختياري) لإظهار قوة التباين */}
-        <div className="pt-4">
-          <button className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-medium text-white transition-all hover:bg-brand-600">
-            تصفح المنتجات
-          </button>
-        </div>
       </div>
     </section>
   );
