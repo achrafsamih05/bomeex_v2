@@ -78,11 +78,6 @@ function AdminLoginForm() {
           {submitting ? "…" : `${t("auth.signIn")} as admin`}
         </button>
       </form>
-      <div className="rounded-xl border border-ink-100 bg-ink-50/80 p-3 text-xs text-ink-600">
-        <div className="font-medium text-ink-700">Seed admin</div>
-        <div>admin@nova.shop · admin1234</div>
-        <p className="mt-1 text-ink-500">Change the password immediately after first login.</p>
-      </div>
     </AuthLayout>
   );
 }
