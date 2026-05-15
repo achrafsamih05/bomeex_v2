@@ -311,8 +311,8 @@ export async function createOrder(o: Order): Promise<void> {
     id: o.id,
     user_id: o.userId ?? null,
     customer_name: o.customer.name,
-    customer_email: o.customer.email,
-    customer_phone: o.customer.phone ?? null,
+    customer_email: o.customer.email || null,
+    customer_phone: o.customer.phone,
     customer_address: o.customer.address,
     subtotal: o.subtotal,
     tax: o.tax,
@@ -349,8 +349,8 @@ export async function updateOrder(
   if (patch.status !== undefined) row.status = patch.status;
   if (patch.customer) {
     row.customer_name = patch.customer.name;
-    row.customer_email = patch.customer.email;
-    row.customer_phone = patch.customer.phone ?? null;
+    row.customer_email = patch.customer.email || null;
+    row.customer_phone = patch.customer.phone;
     row.customer_address = patch.customer.address;
   }
   // Allow admins to edit money fields directly when they reprice an order.

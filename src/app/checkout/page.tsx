@@ -73,7 +73,7 @@ export default function CheckoutPage() {
       const order = await apiSend<{ id: string }>("/api/orders", "POST", {
         customer: {
           name: String(data.get("name") ?? ""),
-          email: String(data.get("email") ?? ""),
+          email: data.get("email") ? String(data.get("email")) : undefined,
           phone: String(data.get("phone") ?? ""),
           address: String(data.get("address") ?? ""),
         },
@@ -187,14 +187,18 @@ export default function CheckoutPage() {
 
           <form onSubmit={onSubmit} className="space-y-4">
             <Field label={t("checkout.name")} name="name" required defaultValue={me?.name} />
-            <Field
-              label={t("checkout.email")}
-              name="email"
-              type="email"
-              required
-              defaultValue={me?.email}
-            />
-            <Field label={t("checkout.phone")} name="phone" type="tel" defaultValue={me?.phone} />
+            {/* Email: hidden for guests (phone is the primary identifier),
+                readonly + auto-filled for authenticated users */}
+            {me && (
+              <Field
+                label={t("checkout.email")}
+                name="email"
+                type="email"
+                defaultValue={me.email}
+                readOnly
+              />
+            )}
+            <Field label={t("checkout.phone")} name="phone" type="tel" required defaultValue={me?.phone} />
             <Field
               label={t("checkout.address")}
               name="address"
@@ -265,12 +269,14 @@ function Field({
   type = "text",
   required,
   defaultValue,
+  readOnly,
 }: {
   label: string;
   name: string;
   type?: string;
   required?: boolean;
   defaultValue?: string;
+  readOnly?: boolean;
 }) {
   return (
     <label className="block">
@@ -280,7 +286,8 @@ function Field({
         type={type}
         required={required}
         defaultValue={defaultValue}
-        className="h-11 w-full rounded-xl border border-ink-200 bg-white px-3 text-sm transition focus:border-ink-900 focus:outline-none"
+        readOnly={readOnly}
+        className={`h-11 w-full rounded-xl border border-ink-200 bg-white px-3 text-sm transition focus:border-ink-900 focus:outline-none ${readOnly ? "cursor-not-allowed bg-ink-50 text-ink-500" : ""}`}
       />
     </label>
   );

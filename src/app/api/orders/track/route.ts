@@ -6,22 +6,15 @@ import { handle, httpError } from "@/lib/server/http";
 // Public order tracking endpoint.
 //
 //   GET /api/orders/track?id=<order_id>&email=<customer_email>
+//   GET /api/orders/track?id=<order_id>&phone=<customer_phone>
 //
-// Why a separate route from /api/orders/[id]?
-//   - /api/orders/[id] requires an authenticated session (owner or admin).
-//     That's the right policy for the account dashboard, but it's wrong for
-//     the public "track my order" use case where the customer paid as a
-//     guest and never created an account.
-//   - The trade-off: we can't trust the caller's identity, so we use the
-//     order id + customer email as a paired bearer secret. Both must match
-//     a single row before we return anything. An attacker who knows the
-//     order id alone gets `Not found`; one who guesses an email alone gets
-//     `Not found`; only the legitimate owner has both.
+// Supports lookup by EITHER email or phone paired with the order id.
+// Since the checkout refactor makes email optional (guests order with only
+// phone), the phone-based path is the primary one. Email lookup is kept for
+// backward compatibility with orders that were placed before the refactor.
 //
-// Response shape is intentionally TRIMMED — we drop the internal `userId`
-// and item productIds so this endpoint can never be used to enumerate the
-// catalog or reverse-look-up a user. The customer just needs to see status,
-// shipping, and what they bought.
+// Security model: the caller must supply the order id PLUS a matching
+// identifier (email or phone). Neither alone is sufficient.
 // ---------------------------------------------------------------------------
 
 export const dynamic = "force-dynamic";
@@ -38,9 +31,8 @@ interface PublicOrder {
   createdAt: string;
   customer: {
     name: string;
-    // Echo the email back redacted so a screenshot of the tracking page
-    // doesn't leak the full address. Format: "j***@example.com".
-    email: string;
+    email?: string;
+    phone: string;
     address: string;
   };
   items: PublicOrderItem[];
@@ -49,10 +41,16 @@ interface PublicOrder {
   total: number;
 }
 
-function redactEmail(email: string): string {
+function redactEmail(email: string | undefined): string | undefined {
+  if (!email) return undefined;
   const at = email.indexOf("@");
   if (at <= 1) return "***" + email.slice(at);
   return email[0] + "***" + email.slice(at);
+}
+
+function redactPhone(phone: string): string {
+  if (phone.length <= 4) return "***" + phone;
+  return "***" + phone.slice(-4);
 }
 
 export const GET = (req: NextRequest) =>
@@ -60,9 +58,15 @@ export const GET = (req: NextRequest) =>
     const { searchParams } = new URL(req.url);
     const idRaw = searchParams.get("id")?.trim() ?? "";
     const emailRaw = searchParams.get("email")?.trim().toLowerCase() ?? "";
+    const phoneRaw = searchParams.get("phone")?.trim() ?? "";
 
-    if (!idRaw || !emailRaw) {
-      httpError(400, "Order id and email are required");
+    if (!idRaw) {
+      httpError(400, "Order id is required");
+    }
+
+    // Must provide at least one identifier alongside the order id.
+    if (!emailRaw && !phoneRaw) {
+      httpError(400, "Either email or phone is required for tracking");
     }
 
     const order = await getOrder(idRaw);
@@ -70,7 +74,21 @@ export const GET = (req: NextRequest) =>
     // endpoint cannot be used to confirm whether an order id exists.
     if (!order) httpError(404, "Order not found");
 
-    if ((order!.customer.email || "").toLowerCase().trim() !== emailRaw) {
+    // Verify the provided identifier matches.
+    let matched = false;
+
+    if (emailRaw && order!.customer.email) {
+      matched = order!.customer.email.toLowerCase().trim() === emailRaw;
+    }
+
+    if (!matched && phoneRaw) {
+      // Normalize phone comparison: strip whitespace and common formatting
+      // characters so "05 55 12 34" matches "0555 1234" etc.
+      const normalize = (p: string) => p.replace(/[\s\-\(\)\.]/g, "");
+      matched = normalize(order!.customer.phone) === normalize(phoneRaw);
+    }
+
+    if (!matched) {
       httpError(404, "Order not found");
     }
 
@@ -81,6 +99,7 @@ export const GET = (req: NextRequest) =>
       customer: {
         name: order!.customer.name,
         email: redactEmail(order!.customer.email),
+        phone: redactPhone(order!.customer.phone),
         address: order!.customer.address,
       },
       items: order!.items.map((it) => ({

@@ -303,7 +303,7 @@ function OrderEditor({
 
   // Customer block
   const [name, setName] = useState(order.customer.name);
-  const [email, setEmail] = useState(order.customer.email);
+  const [email, setEmail] = useState(order.customer.email ?? "");
   const [phone, setPhone] = useState(order.customer.phone ?? "");
   const [address, setAddress] = useState(order.customer.address);
 
@@ -358,8 +358,8 @@ function OrderEditor({
     setError(null);
 
     // Client-side validation matches the server contract.
-    if (!name.trim() || !email.trim() || !address.trim()) {
-      setError("Name, email and address are required.");
+    if (!name.trim() || !phone.trim() || !address.trim()) {
+      setError("Name, phone and address are required.");
       return;
     }
     if (items.length === 0) {
@@ -386,7 +386,7 @@ function OrderEditor({
       await apiSend(`/api/orders/${order.id}`, "PATCH", {
         customer: {
           name: name.trim(),
-          email: email.trim(),
+          email: email.trim() || undefined,
           phone: phone.trim(),
           address: address.trim(),
         },

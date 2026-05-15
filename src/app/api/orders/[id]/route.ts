@@ -76,15 +76,14 @@ export const PATCH = (
       if (typeof c.name !== "string" || c.name.trim().length === 0) {
         httpError(400, "customer.name is required");
       }
-      if (typeof c.email !== "string" || c.email.trim().length === 0) {
-        httpError(400, "customer.email is required");
-      }
       if (typeof c.address !== "string" || c.address.trim().length === 0) {
         httpError(400, "customer.address is required");
       }
       patch.customer = {
         name: c.name!.trim(),
-        email: c.email!.trim().toLowerCase(),
+        email: typeof c.email === "string" && c.email.trim().length > 0
+          ? c.email.trim().toLowerCase()
+          : undefined,
         phone: typeof c.phone === "string" ? c.phone.trim() : "",
         address: c.address!.trim(),
         city: typeof c.city === "string" ? c.city.trim() : undefined,

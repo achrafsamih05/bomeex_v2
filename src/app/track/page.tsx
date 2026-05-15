@@ -29,7 +29,7 @@ interface PublicOrder {
   id: string;
   status: string;
   createdAt: string;
-  customer: { name: string; email: string; address: string };
+  customer: { name: string; email?: string; phone: string; address: string };
   items: { name: string; quantity: number; price: number }[];
   subtotal: number;
   tax: number;
@@ -50,6 +50,7 @@ export default function TrackPage() {
   const currency = settings?.currency ?? "USD";
 
   const [orderId, setOrderId] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [order, setOrder] = useState<PublicOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,23 +60,30 @@ export default function TrackPage() {
     e.preventDefault();
     setError(null);
     setOrder(null);
-    if (!orderId.trim() || !email.trim()) {
-      setError("Order ID and email are required.");
+    if (!orderId.trim()) {
+      setError("Order ID is required.");
+      return;
+    }
+    if (!phone.trim() && !email.trim()) {
+      setError("Please enter either your phone number or email.");
       return;
     }
     setLoading(true);
     try {
-      // Direct fetch (rather than apiGet) so we can craft a friendlier
-      // error message for 404 — apiGet would just throw "Order not found".
+      // Build query params — send whichever identifier(s) the user provided.
+      const params = new URLSearchParams({ id: orderId.trim() });
+      if (phone.trim()) params.set("phone", phone.trim());
+      if (email.trim()) params.set("email", email.trim());
+
       const res = await fetch(
-        `/api/orders/track?id=${encodeURIComponent(orderId.trim())}&email=${encodeURIComponent(email.trim())}`,
+        `/api/orders/track?${params.toString()}`,
         { cache: "no-store" }
       );
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(
           res.status === 404
-            ? "We couldn't find an order with that ID and email."
+            ? "We couldn't find an order matching those details."
             : json.error ?? "Lookup failed."
         );
         return;
@@ -96,8 +104,8 @@ export default function TrackPage() {
             Track your order
           </h1>
           <p className="text-sm text-ink-500">
-            Enter the order ID from your confirmation email and the email
-            address you placed the order with. No account needed.
+            Enter your order ID and phone number to check the status. You can
+            also use your email if you provided one during checkout.
           </p>
         </header>
 
@@ -114,7 +122,17 @@ export default function TrackPage() {
               className={inputCls}
             />
           </Field>
-          <Field label="Email">
+          <Field label="Phone number">
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="05 55 12 34 56"
+              autoComplete="tel"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Email (optional)">
             <input
               type="email"
               value={email}
@@ -161,7 +179,10 @@ export default function TrackPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <Block label="Customer">
                 <p className="text-sm font-medium">{order.customer.name}</p>
-                <p className="text-xs text-ink-500">{order.customer.email}</p>
+                <p className="text-xs text-ink-500">{order.customer.phone}</p>
+                {order.customer.email && (
+                  <p className="text-xs text-ink-500">{order.customer.email}</p>
+                )}
               </Block>
               <Block label="Shipping address">
                 <p className="text-sm whitespace-pre-line">

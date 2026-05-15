@@ -204,8 +204,8 @@ create table if not exists public.orders (
   id                text primary key,
   user_id           text references public.users(id) on delete set null,
   customer_name     text not null,
-  customer_email    text not null,
-  customer_phone    text,
+  customer_email    text,
+  customer_phone    text not null,
   customer_address  text not null,
   subtotal          numeric(12, 2) not null,
   tax               numeric(12, 2) not null,
@@ -394,6 +394,22 @@ begin
     foreign key (user_id) references public.users(id) on delete cascade;
 end $$;
 
+-- ============================================================================
+-- ORDERS COLUMN ALIGNMENT (checkout refactor)
+--
+-- customer_email is now OPTIONAL (guests can place orders with just a phone).
+-- customer_phone is now REQUIRED (primary identifier for guest orders).
+-- Safe to re-run: ALTER COLUMN ... DROP NOT NULL is idempotent in Postgres
+-- (no error if the column is already nullable).
+-- ============================================================================
+
+alter table public.orders alter column customer_email drop not null;
+alter table public.orders alter column customer_phone set not null;
+
+-- Backfill: any existing rows with NULL phone get an empty-string placeholder
+-- so the NOT NULL constraint can be enforced. A truly NULL phone on a legacy
+-- row means the data was never collected — '' is the least-disruptive fix.
+update public.orders set customer_phone = '' where customer_phone is null;
 
 
 select 'users columns'      as check,
