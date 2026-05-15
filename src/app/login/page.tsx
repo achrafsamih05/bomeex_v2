@@ -74,11 +74,6 @@ function LoginForm() {
           {submitting ? "…" : t("auth.signIn")}
         </button>
       </form>
-      <p className="text-center text-xs text-ink-400">
-        <Link href="/login/admin" className="hover:text-ink-600">
-          Admin sign in →
-        </Link>
-      </p>
     </AuthLayout>
   );
 }
