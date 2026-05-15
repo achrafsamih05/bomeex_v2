@@ -167,17 +167,36 @@ export async function deleteProduct(id: string): Promise<Product | null> {
 }
 
 /**
- * Generates a new product id. We count existing rows and pad — good enough
- * for demo data. In real production either let Postgres generate a uuid via
- * `default uuid_generate_v4()` or use a dedicated sequence.
+ * Generates a globally-unique product id.
+ *
+ * Replaces the legacy "p-001 / p-002 / …" sequential scheme, which had two
+ * real problems:
+ *   1. Race conditions — two admins creating products at the same time both
+ *      observed the same `count`, and one INSERT crashed on the PK collision.
+ *   2. Predictable ids leaked the catalog size (`/api/products/p-042`
+ *      told a stranger we have ~42 products).
+ *
+ * We now use Web Crypto's `randomUUID()` (available in Node ≥ 19 and the
+ * Edge runtime) for entropy and base36-encode a slice of it so the id stays
+ * compact and URL-friendly. The `prd_` prefix keeps ids self-describing in
+ * logs and decouples this from `p-…` legacy rows so old data still resolves.
+ *
+ * Format: `prd_<10 chars of base36>` (e.g. `prd_2k4f8h3a9z`). 36^10 ≈ 3.6e15,
+ * which is comfortably collision-resistant for any realistic catalog size.
+ *
+ * The function is async to keep the call sites (which already `await
+ * nextProductId()`) unchanged — no migration needed in route handlers.
  */
 export async function nextProductId(): Promise<string> {
-  const { count, error } = await sb()
-    .from("products")
-    .select("id", { count: "exact", head: true });
-  if (error) raise("nextProductId", error);
-  const n = (count ?? 0) + 1;
-  return `p-${String(n).padStart(3, "0")}`;
+  // crypto.randomUUID() returns a hex string with hyphens, e.g.
+  //   "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"
+  // We strip the hyphens, parse a slice as a hex int, and re-encode in
+  // base36 for a shorter, lowercase-letter+digit id.
+  const raw = crypto.randomUUID().replace(/-/g, "");
+  // Use 12 hex chars (48 bits, ~2.8e14) to keep base36 output around 10
+  // chars. BigInt avoids the 2^53 precision ceiling of Number.parseInt.
+  const slug = BigInt("0x" + raw.slice(0, 12)).toString(36).padStart(10, "0");
+  return `prd_${slug}`;
 }
 
 // ---------- Categories -----------------------------------------------------
@@ -334,18 +353,53 @@ export async function updateOrder(
     row.customer_phone = patch.customer.phone ?? null;
     row.customer_address = patch.customer.address;
   }
-  if (Object.keys(row).length === 0) return getOrder(id);
+  // Allow admins to edit money fields directly when they reprice an order.
+  // Validation lives in the API route — db.ts only persists what it's given.
+  if (patch.subtotal !== undefined) row.subtotal = patch.subtotal;
+  if (patch.tax !== undefined) row.tax = patch.tax;
+  if (patch.total !== undefined) row.total = patch.total;
 
-  const { data, error } = await sb()
-    .from("orders")
-    .update(row)
-    .eq("id", id)
-    .select(ORDER_COLUMNS)
-    .maybeSingle();
-  if (error) raise("updateOrder", error);
-  if (!data) return null;
-  const items = await loadAllOrderItems([id]);
-  return orderFromRow(data as unknown as OrderRow, items);
+  // No row mutations and no items change → just hand back the current order.
+  if (Object.keys(row).length === 0 && patch.items === undefined) {
+    return getOrder(id);
+  }
+
+  if (Object.keys(row).length > 0) {
+    const { error } = await sb()
+      .from("orders")
+      .update(row)
+      .eq("id", id);
+    if (error) raise("updateOrder", error);
+  }
+
+  // Items replacement strategy: delete-then-insert. We could diff and
+  // surgically update individual rows, but the order edit UI is admin-only
+  // and orders rarely have more than ~20 items, so a full replace is
+  // simpler and removes any chance of leaving orphaned rows. The
+  // surrounding ON DELETE CASCADE on order_items.order_id makes this safe.
+  if (patch.items !== undefined) {
+    const { error: delErr } = await sb()
+      .from("order_items")
+      .delete()
+      .eq("order_id", id);
+    if (delErr) raise("updateOrder (delete items)", delErr);
+
+    if (patch.items.length > 0) {
+      const itemRows = patch.items.map<OrderItemRow>((i) => ({
+        order_id: id,
+        product_id: i.productId,
+        name: i.name,
+        quantity: i.quantity,
+        price: i.price,
+      }));
+      const { error: insErr } = await sb().from("order_items").insert(itemRows);
+      if (insErr) raise("updateOrder (insert items)", insErr);
+    }
+  }
+
+  // Always re-fetch after a mutation so callers get the canonical persisted
+  // shape (including any DB-side defaults that fired).
+  return getOrder(id);
 }
 
 export async function nextOrderId(): Promise<string> {

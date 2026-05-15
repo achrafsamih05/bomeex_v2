@@ -5,6 +5,8 @@ import { Toolbar } from "./Toolbar";
 import { BottomNav } from "./BottomNav";
 import { CartDrawer } from "./CartDrawer";
 import { Footer } from "./Footer";
+import { BanGuard } from "./BanGuard";
+import { Toaster } from "../ui/Toaster";
 import { useI18n } from "@/lib/useI18n";
 
 /**
@@ -15,6 +17,11 @@ import { useI18n } from "@/lib/useI18n";
  *   - the Footer is rendered once below the page content. The Footer reads
  *     its data from `useSettings()` and auto-updates via the settings SSE
  *     channel, so every page picks up admin edits instantly.
+ *   - <BanGuard /> watches /api/auth/me's `banned` sentinel and bounces
+ *     compromised sessions to /restricted. Renders no UI on its own.
+ *   - <Toaster /> renders the global toast queue. Mounted here (rather than
+ *     in the root layout) because the root layout is a Server Component and
+ *     the toast store is client-only.
  *
  * Layout:
  *   flex column → main content grows, footer sits at the bottom even on
@@ -32,6 +39,8 @@ export function StoreShell({ children }: { children: ReactNode }) {
       <Footer />
       <BottomNav />
       <CartDrawer />
+      <BanGuard />
+      <Toaster />
     </div>
   );
 }

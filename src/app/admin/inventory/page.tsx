@@ -38,6 +38,12 @@ interface DraftProduct {
   descAr: string;
   descFr: string;
   price: number;
+  /**
+   * Cost-of-goods price. Drives the admin Expenses & Profits margin
+   * calculation. 0 is a valid "not priced yet" placeholder so the form
+   * never blocks on it.
+   */
+  purchasePrice: number;
   categoryId: string;
   stock: number;
   images: string[];
@@ -61,6 +67,7 @@ export default function InventoryPage() {
     descAr: "",
     descFr: "",
     price: 0,
+    purchasePrice: 0,
     categoryId: categories[0]?.id ?? "",
     stock: 0,
     images: [],
@@ -85,6 +92,7 @@ export default function InventoryPage() {
       descAr: p.description.ar,
       descFr: p.description.fr,
       price: p.price,
+      purchasePrice: p.purchasePrice,
       categoryId: p.categoryId,
       stock: p.stock,
       // Product already normalises single-URL legacy rows into images[].
@@ -99,6 +107,11 @@ export default function InventoryPage() {
       name: { en: d.nameEn, ar: d.nameAr, fr: d.nameFr },
       description: { en: d.descEn, ar: d.descAr, fr: d.descFr },
       price: Number(d.price),
+      // Send the cost-of-goods price under its canonical camelCase name.
+      // The API route + mapper translate to the snake_case `purchase_price`
+      // column. Coerced to a finite non-negative number on this side too so
+      // the form can't accidentally PATCH NaN into the DB.
+      purchasePrice: Math.max(0, Number(d.purchasePrice) || 0),
       categoryId: d.categoryId,
       stock: Number(d.stock),
       // Send the new canonical field. The API route also accepts legacy
@@ -375,6 +388,37 @@ function ProductEditor({
                 onChange={(e) => setD({ ...d, price: Number(e.target.value) })}
                 className={inputCls}
               />
+            </L>
+            <L label="Purchase price (cost)">
+              {/*
+               * Cost-of-goods (what we paid). Used by the Expenses & Profits
+               * dashboard. We render the live margin under the input as a
+               * tiny hint so the admin sees a sanity-check number while
+               * typing — no extra deps, just a `<p>`.
+               */}
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={d.purchasePrice}
+                onChange={(e) =>
+                  setD({ ...d, purchasePrice: Number(e.target.value) })
+                }
+                className={inputCls}
+              />
+              <p className="mt-1 text-[11px] text-ink-500">
+                Margin per unit:{" "}
+                <span
+                  className={cn(
+                    "font-medium",
+                    d.price - d.purchasePrice < 0
+                      ? "text-red-600"
+                      : "text-emerald-600"
+                  )}
+                >
+                  {(d.price - d.purchasePrice).toFixed(2)}
+                </span>
+              </p>
             </L>
             <L label="Stock">
               <input

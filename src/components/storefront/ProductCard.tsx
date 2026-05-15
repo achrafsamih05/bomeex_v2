@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { Icon } from "../ui/Icon";
 import { useCart } from "@/lib/store/cart";
+import { toast } from "@/lib/store/toast";
 import { useSettings } from "@/lib/client/hooks";
 import { formatCurrency } from "@/lib/format";
 import { useI18n } from "@/lib/useI18n";
@@ -159,12 +160,19 @@ export function ProductCard({
          * click from bubbling so it doesn't also open the Quick View — the
          * CTA is for shoppers who already know what they want; the card
          * surface (everywhere else) is for shoppers who want more detail.
+         *
+         * Cart drawer no longer auto-opens (see src/lib/store/cart.ts) —
+         * we surface a toast instead. The cart icon in the Toolbar and
+         * BottomNav remain the explicit "view my cart" affordances.
          */}
         <button
           disabled={outOfStock}
           onClick={(e) => {
             e.stopPropagation();
             addItem(product.id, 1);
+            toast.success(`${product.name[locale]} added to cart`, {
+              icon: "ShoppingBag",
+            });
           }}
           onKeyDown={(e) => {
             // Also prevent Enter/Space on the button from triggering the

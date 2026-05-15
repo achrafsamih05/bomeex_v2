@@ -150,6 +150,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/track" className="text-ink-700 hover:text-ink-900">
+                  Track order
+                </Link>
+              </li>
+              <li>
                 <Link
                   href="/account"
                   className="text-ink-700 hover:text-ink-900"

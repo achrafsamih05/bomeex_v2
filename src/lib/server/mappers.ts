@@ -39,7 +39,7 @@ import type {
 
 export const PRODUCT_COLUMNS =
   "id, sku, name_en, name_ar, name_fr, description_en, description_ar, description_fr, " +
-  "price, category_id, stock, image, images, rating, created_at";
+  "price, purchase_price, category_id, stock, image, images, rating, created_at";
 
 export const CATEGORY_COLUMNS =
   "id, slug, name_en, name_ar, name_fr, icon";
@@ -139,6 +139,11 @@ export interface ProductRow {
   description_ar: string | null;
   description_fr: string | null;
   price: number | string;
+  /**
+   * Cost price (what the store paid). Optional in the row type because old
+   * schemas may not have this column yet — productFromRow falls back to 0.
+   */
+  purchase_price?: number | string | null;
   category_id: string;
   stock: number | string;
   image: string | null;
@@ -205,6 +210,7 @@ export function productFromRow(r: ProductRow): Product {
       ""
     ),
     price: num(r.price),
+    purchasePrice: num(r.purchase_price, 0),
     categoryId: r.category_id,
     stock: num(r.stock),
     images,
@@ -234,6 +240,7 @@ export function productToRow(p: Partial<Product>): Partial<ProductRow> {
     row.description_fr = p.description.fr ?? "";
   }
   if (p.price !== undefined) row.price = p.price;
+  if (p.purchasePrice !== undefined) row.purchase_price = p.purchasePrice;
   if (p.categoryId !== undefined) row.category_id = p.categoryId;
   if (p.stock !== undefined) row.stock = p.stock;
 

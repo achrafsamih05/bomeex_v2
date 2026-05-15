@@ -129,15 +129,37 @@ export function useUsers() {
 }
 
 // ---- current user ("me") ----
+//
+// The /api/auth/me endpoint returns one of three shapes:
+//   - PublicUser            → signed in and not banned
+//   - null                  → no session
+//   - { banned: true }      → cookie matched a banned user; cookie was just
+//                             cleared on the server. The client should bounce
+//                             the visitor to /restricted.
+//
+// We collapse the first two into the existing `data: PublicUser | null` so
+// every page that already destructures `data` keeps working unchanged. The
+// banned signal is surfaced as a separate `banned` flag — only BanGuard
+// reads it, and it's strictly additive.
 export function useMe() {
   const [data, setData] = useState<PublicUser | null>(null);
+  const [banned, setBanned] = useState(false);
   const [loading, setLoading] = useState(true);
   const reload = useCallback(async () => {
     try {
-      const me = await apiGet<PublicUser | null>("/api/auth/me");
-      setData(me);
+      const raw = await apiGet<PublicUser | { banned: true } | null>(
+        "/api/auth/me"
+      );
+      if (raw && typeof raw === "object" && "banned" in raw && raw.banned) {
+        setData(null);
+        setBanned(true);
+      } else {
+        setData((raw as PublicUser | null) ?? null);
+        setBanned(false);
+      }
     } catch {
       setData(null);
+      setBanned(false);
     } finally {
       setLoading(false);
     }
@@ -146,5 +168,5 @@ export function useMe() {
     reload();
   }, [reload]);
   useRealtime(["users"], reload);
-  return { data, loading, reload, setData };
+  return { data, banned, loading, reload, setData };
 }
