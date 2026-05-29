@@ -56,6 +56,11 @@ import {
   Linkedin,
   Music2,
   Printer,
+  Wallet,
+  Receipt,
+  Layers,
+  Tag,
+  Plane,
   type LucideIcon,
 } from "lucide-react";
 
@@ -116,6 +121,11 @@ export const ICONS: Record<string, LucideIcon> = {
   // TikTok has no dedicated lucide icon; Music2 is the closest stand-in.
   Music2,
   Printer,
+  Wallet,
+  Receipt,
+  Layers,
+  Tag,
+  Plane,
 };
 
 export function Icon({

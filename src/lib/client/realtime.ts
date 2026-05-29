@@ -11,7 +11,10 @@ type Channel =
   | "orders"
   | "invoices"
   | "users"
-  | "settings";
+  | "settings"
+  | "shipping"
+  | "expenses"
+  | "pricing";
 
 interface Listener {
   channels: Channel[];

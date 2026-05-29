@@ -5,11 +5,13 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   Category,
+  Expense,
   Invoice,
   Order,
   Product,
   PublicUser,
   Settings,
+  ShippingRate,
 } from "../types";
 import { apiGet } from "./api";
 import { useRealtime } from "./realtime";
@@ -169,4 +171,58 @@ export function useMe() {
   }, [reload]);
   useRealtime(["users"], reload);
   return { data, banned, loading, reload, setData };
+}
+
+
+// ---- shipping rates (admin) ----
+export function useShippingRates() {
+  const [data, setData] = useState<ShippingRate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(async () => {
+    try {
+      setError(null);
+      setData(await apiGet<ShippingRate[]>("/api/admin/shipping"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    reload();
+  }, [reload]);
+  useRealtime(["shipping"], reload);
+  return { data, loading, error, reload };
+}
+
+// ---- finances: wallet balance + expenses (admin) ----
+//
+// Listens on BOTH the `expenses` channel (a logged cost debits the wallet) and
+// the `invoices` channel (marking an invoice paid credits it), so the live
+// balance stays correct no matter which side moved it.
+export function useFinances() {
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(async () => {
+    try {
+      setError(null);
+      const d = await apiGet<{ walletBalance: number; expenses: Expense[] }>(
+        "/api/admin/expenses"
+      );
+      setWalletBalance(d.walletBalance);
+      setExpenses(d.expenses);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    reload();
+  }, [reload]);
+  useRealtime(["expenses", "invoices"], reload);
+  return { walletBalance, expenses, loading, error, reload };
 }

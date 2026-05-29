@@ -11,7 +11,10 @@ export type ChannelName =
   | "orders"
   | "invoices"
   | "users"
-  | "settings";
+  | "settings"
+  | "shipping"
+  | "expenses"
+  | "pricing";
 
 export interface BusEvent {
   channel: ChannelName;

@@ -3,34 +3,49 @@ import { getSupabaseAdmin } from "./supabase";
 import {
   CATEGORY_COLUMNS,
   CategoryRow,
+  EXPENSE_COLUMNS,
+  ExpenseRow,
   INVOICE_COLUMNS,
   InvoiceRow,
   ORDER_COLUMNS,
   ORDER_ITEM_COLUMNS,
   OrderItemRow,
   OrderRow,
+  PRICING_TIER_COLUMNS,
   PRODUCT_COLUMNS,
+  PricingTierRow,
   ProductRow,
   SETTINGS_COLUMNS,
+  SHIPPING_RATE_COLUMNS,
   SettingsRow,
+  ShippingRateRow,
   USER_COLUMNS,
   UserRow,
   categoryFromRow,
+  expenseFromRow,
   invoiceFromRow,
   orderFromRow,
+  pricingTierFromRow,
   productFromRow,
   productToRow,
   settingsFromRow,
   settingsToRow,
+  shippingRateFromRow,
+  shippingRateToRow,
   userFromRow,
   userToRow,
 } from "./mappers";
 import type {
   Category,
+  Expense,
+  ExpenseCategory,
   Invoice,
   Order,
   Product,
+  ProductPricingTier,
+  ProductPricingTierDraft,
   Settings,
+  ShippingRate,
   User,
 } from "../types";
 
@@ -108,7 +123,16 @@ export async function listProducts(): Promise<Product[]> {
   if (error) raise("listProducts", error);
   const rows = (data ?? []) as unknown as ProductRow[];
   warnIfEmpty("listProducts", rows);
-  return rows.map(productFromRow);
+  const products = rows.map(productFromRow);
+  // Batch-load wholesale tiers and attach. Non-fatal on error so a project
+  // that hasn't run the ERP migration yet still renders its catalog.
+  const tiersByProduct = await loadPricingTiersGrouped(
+    products.map((p) => p.id)
+  );
+  for (const p of products) {
+    p.pricingTiers = tiersByProduct.get(p.id) ?? [];
+  }
+  return products;
 }
 
 export async function getProduct(id: string): Promise<Product | null> {
@@ -118,7 +142,10 @@ export async function getProduct(id: string): Promise<Product | null> {
     .eq("id", id)
     .maybeSingle();
   if (error) raise("getProduct", error);
-  return data ? productFromRow(data as unknown as ProductRow) : null;
+  if (!data) return null;
+  const product = productFromRow(data as unknown as ProductRow);
+  product.pricingTiers = await listPricingTiers(id);
+  return product;
 }
 
 export async function createProduct(p: Product): Promise<Product> {
@@ -639,4 +666,255 @@ export async function updateSettings(
     return settingsFromRow(upsert.data as unknown as SettingsRow);
   }
   return settingsFromRow(data as unknown as SettingsRow);
+}
+
+
+// ---------------------------------------------------------------------------
+// ID generators for the ERP extension tables. Same crypto-random base36 scheme
+// as nextProductId() — compact, URL-safe, collision-resistant, and prefixed so
+// ids are self-describing in logs.
+// ---------------------------------------------------------------------------
+
+function randomId(prefix: string): string {
+  const raw = crypto.randomUUID().replace(/-/g, "");
+  const slug = BigInt("0x" + raw.slice(0, 12)).toString(36).padStart(10, "0");
+  return `${prefix}_${slug}`;
+}
+
+// ---------- Shipping rates -------------------------------------------------
+
+export async function listShippingRates(): Promise<ShippingRate[]> {
+  const { data, error } = await sb()
+    .from("shipping_rates")
+    .select(SHIPPING_RATE_COLUMNS)
+    .order("city", { ascending: true });
+  if (error) raise("listShippingRates", error);
+  return ((data ?? []) as unknown as ShippingRateRow[]).map(shippingRateFromRow);
+}
+
+export async function getShippingRateByCity(
+  city: string
+): Promise<ShippingRate | null> {
+  const { data, error } = await sb()
+    .from("shipping_rates")
+    .select(SHIPPING_RATE_COLUMNS)
+    .ilike("city", city.trim())
+    .maybeSingle();
+  if (error) raise("getShippingRateByCity", error);
+  return data ? shippingRateFromRow(data as unknown as ShippingRateRow) : null;
+}
+
+/**
+ * Create-or-update a city's shipping rate. The unique `city` constraint makes
+ * this a natural upsert keyed on the (case-normalised) city name, so the admin
+ * form can use a single "save" action whether the city is new or existing.
+ * `updated_at` is always refreshed so the admin table can surface staleness.
+ */
+export async function upsertShippingRate(input: {
+  city: string;
+  price: number;
+  active?: boolean;
+}): Promise<ShippingRate> {
+  const existing = await getShippingRateByCity(input.city);
+  const now = new Date().toISOString();
+
+  if (existing) {
+    const patch = shippingRateToRow({
+      price: input.price,
+      active: input.active ?? existing.active,
+      city: input.city.trim(),
+      updatedAt: now,
+    });
+    const { data, error } = await sb()
+      .from("shipping_rates")
+      .update(patch)
+      .eq("id", existing.id)
+      .select(SHIPPING_RATE_COLUMNS)
+      .single();
+    if (error) raise("upsertShippingRate (update)", error);
+    return shippingRateFromRow(data as unknown as ShippingRateRow);
+  }
+
+  const row = shippingRateToRow({
+    id: randomId("shr"),
+    city: input.city.trim(),
+    price: input.price,
+    active: input.active ?? true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const { data, error } = await sb()
+    .from("shipping_rates")
+    .insert(row)
+    .select(SHIPPING_RATE_COLUMNS)
+    .single();
+  if (error) raise("upsertShippingRate (insert)", error);
+  return shippingRateFromRow(data as unknown as ShippingRateRow);
+}
+
+export async function deleteShippingRate(
+  id: string
+): Promise<ShippingRate | null> {
+  const { data, error } = await sb()
+    .from("shipping_rates")
+    .delete()
+    .eq("id", id)
+    .select(SHIPPING_RATE_COLUMNS)
+    .maybeSingle();
+  if (error) raise("deleteShippingRate", error);
+  return data ? shippingRateFromRow(data as unknown as ShippingRateRow) : null;
+}
+
+// ---------- Wallet + expenses ----------------------------------------------
+
+/**
+ * Reads the live wallet balance off the single store-profile row. The wallet
+ * is mutated exclusively by the `expenses_apply_wallet` and
+ * `invoices_apply_wallet` DB triggers (see the ERP migration), so this is a
+ * pure read — the API never writes the balance directly.
+ */
+export async function getWalletBalance(): Promise<number> {
+  const { data, error } = await sb()
+    .from("settings")
+    .select("wallet_balance")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) raise("getWalletBalance", error);
+  const raw = (data as { wallet_balance?: number | string } | null)
+    ?.wallet_balance;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export async function listExpenses(): Promise<Expense[]> {
+  const { data, error } = await sb()
+    .from("expenses")
+    .select(EXPENSE_COLUMNS)
+    .order("created_at", { ascending: false });
+  if (error) raise("listExpenses", error);
+  return ((data ?? []) as unknown as ExpenseRow[]).map(expenseFromRow);
+}
+
+/**
+ * Inserts an expense row. We intentionally do NOT touch `wallet_balance` here:
+ * the `expenses_apply_wallet` AFTER INSERT trigger debits it atomically in the
+ * same transaction, which is the single source of truth the task requires.
+ */
+export async function createExpense(input: {
+  title: string;
+  category: ExpenseCategory;
+  amount: number;
+  description: string;
+}): Promise<Expense> {
+  const row = {
+    id: randomId("exp"),
+    title: input.title,
+    category: input.category,
+    amount: input.amount,
+    description: input.description,
+    created_at: new Date().toISOString(),
+  };
+  const { data, error } = await sb()
+    .from("expenses")
+    .insert(row)
+    .select(EXPENSE_COLUMNS)
+    .single();
+  if (error) raise("createExpense", error);
+  return expenseFromRow(data as unknown as ExpenseRow);
+}
+
+export async function deleteExpense(id: string): Promise<Expense | null> {
+  const { data, error } = await sb()
+    .from("expenses")
+    .delete()
+    .eq("id", id)
+    .select(EXPENSE_COLUMNS)
+    .maybeSingle();
+  if (error) raise("deleteExpense", error);
+  return data ? expenseFromRow(data as unknown as ExpenseRow) : null;
+}
+
+// ---------- Product pricing tiers ------------------------------------------
+
+let pricingTiersWarned = false;
+
+/**
+ * Batch-load tiers for many products at once, grouped by product id and sorted
+ * by `min_quantity`. Resilient by design: if the `product_pricing_tiers` table
+ * doesn't exist yet (ERP migration not run) or the read fails for any reason,
+ * we log once and return an empty map so the public catalog keeps rendering.
+ * Wholesale tiers are an enhancement — their absence must never blank a page.
+ */
+async function loadPricingTiersGrouped(
+  productIds: string[]
+): Promise<Map<string, ProductPricingTier[]>> {
+  const grouped = new Map<string, ProductPricingTier[]>();
+  if (productIds.length === 0) return grouped;
+  try {
+    const { data, error } = await sb()
+      .from("product_pricing_tiers")
+      .select(PRICING_TIER_COLUMNS)
+      .in("product_id", productIds)
+      .order("min_quantity", { ascending: true });
+    if (error) throw error;
+    for (const row of (data ?? []) as unknown as PricingTierRow[]) {
+      const tier = pricingTierFromRow(row);
+      const list = grouped.get(tier.productId) ?? [];
+      list.push(tier);
+      grouped.set(tier.productId, list);
+    }
+  } catch (err) {
+    if (!pricingTiersWarned) {
+      pricingTiersWarned = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[db] product_pricing_tiers read failed — tiers will be empty. " +
+          "Run supabase/erp-extensions-migration.sql to enable volume pricing.",
+        err
+      );
+    }
+  }
+  return grouped;
+}
+
+export async function listPricingTiers(
+  productId: string
+): Promise<ProductPricingTier[]> {
+  const grouped = await loadPricingTiersGrouped([productId]);
+  return grouped.get(productId) ?? [];
+}
+
+/**
+ * Replace the entire tier set for a product (delete-then-insert), mirroring the
+ * order-items replacement strategy used by `updateOrder`. The whole set is
+ * small and admin-only, so a full replace is simpler than diffing and removes
+ * any chance of orphaned rows. Validation (overlaps, min<max) is enforced in
+ * the API route via `validatePricingTiers` before this runs.
+ */
+export async function replacePricingTiers(
+  productId: string,
+  tiers: ProductPricingTierDraft[]
+): Promise<ProductPricingTier[]> {
+  const { error: delErr } = await sb()
+    .from("product_pricing_tiers")
+    .delete()
+    .eq("product_id", productId);
+  if (delErr) raise("replacePricingTiers (delete)", delErr);
+
+  if (tiers.length > 0) {
+    const rows = tiers.map((t) => ({
+      id: randomId("tier"),
+      product_id: productId,
+      min_quantity: t.minQuantity,
+      max_quantity: t.maxQuantity,
+      price_per_item: t.pricePerItem,
+      created_at: new Date().toISOString(),
+    }));
+    const { error: insErr } = await sb()
+      .from("product_pricing_tiers")
+      .insert(rows);
+    if (insErr) raise("replacePricingTiers (insert)", insErr);
+  }
+
+  return listPricingTiers(productId);
 }

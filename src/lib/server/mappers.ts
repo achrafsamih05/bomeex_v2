@@ -1,11 +1,15 @@
 import type {
   Category,
+  Expense,
+  ExpenseCategory,
   Invoice,
   LocalizedString,
   Order,
   OrderStatus,
   Product,
+  ProductPricingTier,
   Settings,
+  ShippingRate,
   User,
 } from "../types";
 
@@ -493,4 +497,106 @@ export function settingsToRow(s: Partial<Settings>): Partial<SettingsRow> {
   if (s.linkedinUrl !== undefined) row.linkedin_url = s.linkedinUrl;
   if (s.tiktokUrl !== undefined) row.tiktok_url = s.tiktokUrl;
   return row;
+}
+
+
+// ============================================================================
+// Shipping rates
+// ============================================================================
+
+export const SHIPPING_RATE_COLUMNS =
+  "id, city, price, active, created_at, updated_at";
+
+export interface ShippingRateRow {
+  id: string;
+  city: string;
+  price: number | string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function shippingRateFromRow(r: ShippingRateRow): ShippingRate {
+  return {
+    id: r.id,
+    city: r.city,
+    price: num(r.price),
+    active: !!r.active,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export function shippingRateToRow(
+  s: Partial<ShippingRate>
+): Partial<ShippingRateRow> {
+  const row: Partial<ShippingRateRow> = {};
+  if (s.id !== undefined) row.id = s.id;
+  if (s.city !== undefined) row.city = s.city;
+  if (s.price !== undefined) row.price = s.price;
+  if (s.active !== undefined) row.active = s.active;
+  if (s.createdAt !== undefined) row.created_at = s.createdAt;
+  if (s.updatedAt !== undefined) row.updated_at = s.updatedAt;
+  return row;
+}
+
+// ============================================================================
+// Expenses
+// ============================================================================
+
+export const EXPENSE_COLUMNS =
+  "id, title, category, amount, description, created_at";
+
+export interface ExpenseRow {
+  id: string;
+  title: string;
+  category: ExpenseCategory;
+  amount: number | string;
+  description: string | null;
+  created_at: string;
+}
+
+export function expenseFromRow(r: ExpenseRow): Expense {
+  return {
+    id: r.id,
+    title: r.title,
+    category: r.category,
+    amount: num(r.amount),
+    description: r.description ?? "",
+    createdAt: r.created_at,
+  };
+}
+
+// ============================================================================
+// Product pricing tiers
+// ============================================================================
+
+export const PRICING_TIER_COLUMNS =
+  "id, product_id, min_quantity, max_quantity, price_per_item, created_at";
+
+export interface PricingTierRow {
+  id: string;
+  product_id: string;
+  min_quantity: number | string;
+  max_quantity: number | string | null;
+  price_per_item: number | string;
+  created_at: string;
+}
+
+export function pricingTierFromRow(r: PricingTierRow): ProductPricingTier {
+  // max_quantity is nullable in the schema (NULL = open-ended top tier). We
+  // preserve that null all the way to the domain type so the cart logic can
+  // treat it as "min and above".
+  const max =
+    r.max_quantity === null || r.max_quantity === undefined
+      ? null
+      : num(r.max_quantity);
+  return {
+    id: r.id,
+    productId: r.product_id,
+    minQuantity: num(r.min_quantity),
+    maxQuantity: max,
+    pricePerItem: num(r.price_per_item),
+    createdAt: r.created_at,
+  };
 }

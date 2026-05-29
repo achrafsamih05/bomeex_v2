@@ -69,7 +69,8 @@ export async function middleware(req: NextRequest) {
   const isAdminUI = pathname.startsWith("/admin");
   const isAdminApi =
     pathname.startsWith("/api/users") ||
-    pathname.startsWith("/api/analytics");
+    pathname.startsWith("/api/analytics") ||
+    pathname.startsWith("/api/admin");
 
   if (!isAdminUI && !isAdminApi) return NextResponse.next();
 
@@ -93,5 +94,10 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/users/:path*", "/api/analytics/:path*"],
+  matcher: [
+    "/admin/:path*",
+    "/api/users/:path*",
+    "/api/analytics/:path*",
+    "/api/admin/:path*",
+  ],
 };
