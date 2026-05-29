@@ -681,6 +681,61 @@ function randomId(prefix: string): string {
   return `${prefix}_${slug}`;
 }
 
+// ---------------------------------------------------------------------------
+// ERP migration resilience.
+//
+// The ERP tables (shipping_rates, expenses, product_pricing_tiers) and the
+// settings.wallet_balance column only exist once supabase/erp-extensions-
+// migration.sql has been applied. Until then, PostgREST reports the relation
+// or column as missing. We detect exactly those errors so READ paths can
+// degrade to an empty/zero state (keeping the Finances/Shipping pages alive)
+// while WRITE paths surface a clear "run the migration" message instead of a
+// cryptic PGRST205. Any OTHER error still goes through raise() — loud, not
+// silent, per this module's contract.
+// ---------------------------------------------------------------------------
+
+const MISSING_SCHEMA_CODES = new Set([
+  "PGRST205", // table not found in schema cache
+  "PGRST204", // column not found in schema cache
+  "42P01", //   undefined_table
+  "42703", //   undefined_column
+]);
+
+function isMissingSchemaError(err: unknown): boolean {
+  const e = err as { code?: string; message?: string } | null;
+  if (!e) return false;
+  if (e.code && MISSING_SCHEMA_CODES.has(e.code)) return true;
+  const msg = (e.message ?? "").toLowerCase();
+  return (
+    msg.includes("schema cache") ||
+    msg.includes("could not find the table") ||
+    msg.includes("could not find the") ||
+    msg.includes("does not exist")
+  );
+}
+
+const ERP_MIGRATION_HINT =
+  "The ERP tables are missing. Run supabase/erp-extensions-migration.sql in " +
+  "your Supabase project to enable shipping rates, expenses and the wallet.";
+
+let erpMigrationWarned = false;
+/** Warn once per cold start that the ERP migration hasn't been applied. */
+function warnErpMigrationOnce(op: string, err: unknown): void {
+  if (erpMigrationWarned) return;
+  erpMigrationWarned = true;
+  // eslint-disable-next-line no-console
+  console.warn(`[db] ${op}: ${ERP_MIGRATION_HINT}`, err);
+}
+
+/**
+ * For WRITE paths: rethrow a friendly, actionable error when the failure is a
+ * missing ERP table/column, otherwise fall through to raise().
+ */
+function raiseErpWrite(op: string, err: unknown): never {
+  if (isMissingSchemaError(err)) throw new Error(ERP_MIGRATION_HINT);
+  raise(op, err);
+}
+
 // ---------- Shipping rates -------------------------------------------------
 
 export async function listShippingRates(): Promise<ShippingRate[]> {
@@ -688,7 +743,13 @@ export async function listShippingRates(): Promise<ShippingRate[]> {
     .from("shipping_rates")
     .select(SHIPPING_RATE_COLUMNS)
     .order("city", { ascending: true });
-  if (error) raise("listShippingRates", error);
+  if (error) {
+    if (isMissingSchemaError(error)) {
+      warnErpMigrationOnce("listShippingRates", error);
+      return [];
+    }
+    raise("listShippingRates", error);
+  }
   return ((data ?? []) as unknown as ShippingRateRow[]).map(shippingRateFromRow);
 }
 
@@ -700,7 +761,13 @@ export async function getShippingRateByCity(
     .select(SHIPPING_RATE_COLUMNS)
     .ilike("city", city.trim())
     .maybeSingle();
-  if (error) raise("getShippingRateByCity", error);
+  if (error) {
+    if (isMissingSchemaError(error)) {
+      warnErpMigrationOnce("getShippingRateByCity", error);
+      return null;
+    }
+    raise("getShippingRateByCity", error);
+  }
   return data ? shippingRateFromRow(data as unknown as ShippingRateRow) : null;
 }
 
@@ -731,7 +798,7 @@ export async function upsertShippingRate(input: {
       .eq("id", existing.id)
       .select(SHIPPING_RATE_COLUMNS)
       .single();
-    if (error) raise("upsertShippingRate (update)", error);
+    if (error) raiseErpWrite("upsertShippingRate (update)", error);
     return shippingRateFromRow(data as unknown as ShippingRateRow);
   }
 
@@ -748,7 +815,7 @@ export async function upsertShippingRate(input: {
     .insert(row)
     .select(SHIPPING_RATE_COLUMNS)
     .single();
-  if (error) raise("upsertShippingRate (insert)", error);
+  if (error) raiseErpWrite("upsertShippingRate (insert)", error);
   return shippingRateFromRow(data as unknown as ShippingRateRow);
 }
 
@@ -779,7 +846,13 @@ export async function getWalletBalance(): Promise<number> {
     .select("wallet_balance")
     .eq("id", 1)
     .maybeSingle();
-  if (error) raise("getWalletBalance", error);
+  if (error) {
+    if (isMissingSchemaError(error)) {
+      warnErpMigrationOnce("getWalletBalance", error);
+      return 0;
+    }
+    raise("getWalletBalance", error);
+  }
   const raw = (data as { wallet_balance?: number | string } | null)
     ?.wallet_balance;
   const n = typeof raw === "number" ? raw : Number(raw);
@@ -791,7 +864,13 @@ export async function listExpenses(): Promise<Expense[]> {
     .from("expenses")
     .select(EXPENSE_COLUMNS)
     .order("created_at", { ascending: false });
-  if (error) raise("listExpenses", error);
+  if (error) {
+    if (isMissingSchemaError(error)) {
+      warnErpMigrationOnce("listExpenses", error);
+      return [];
+    }
+    raise("listExpenses", error);
+  }
   return ((data ?? []) as unknown as ExpenseRow[]).map(expenseFromRow);
 }
 
@@ -819,7 +898,7 @@ export async function createExpense(input: {
     .insert(row)
     .select(EXPENSE_COLUMNS)
     .single();
-  if (error) raise("createExpense", error);
+  if (error) raiseErpWrite("createExpense", error);
   return expenseFromRow(data as unknown as ExpenseRow);
 }
 
