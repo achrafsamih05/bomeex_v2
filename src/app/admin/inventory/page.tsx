@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Icon } from "@/components/ui/Icon";
+import { ProductPricingTiers } from "@/components/admin/ProductPricingTiers";
 import { useCategories, useProducts, useSettings } from "@/lib/client/hooks";
 import { apiSend } from "@/lib/client/api";
 import { formatCurrency } from "@/lib/format";
@@ -332,6 +333,8 @@ function ProductEditor({
 }) {
   const [d, setD] = useState<DraftProduct>(draft);
   const [saving, setSaving] = useState(false);
+  const settings = useSettings();
+  const currency = settings?.currency ?? "MAD";
 
   async function submit() {
     setSaving(true);
@@ -490,6 +493,22 @@ function ProductEditor({
               />
             </L>
           </div>
+
+          {/*
+           * Wholesale tier pricing. Tiers are persisted against a product id,
+           * so we only show the grid once the product exists. For a brand-new
+           * product we prompt the admin to save first, then reopen the editor.
+           */}
+          {d.id ? (
+            <div className="mt-4">
+              <ProductPricingTiers productId={d.id} currency={currency} />
+            </div>
+          ) : (
+            <p className="mt-4 rounded-xl border border-dashed border-ink-200 bg-ink-50 px-4 py-3 text-xs text-ink-500">
+              Save this product first, then reopen it to configure wholesale
+              tier pricing.
+            </p>
+          )}
         </div>
         <footer className="flex items-center justify-end gap-2 border-t border-ink-100 p-4">
           <button

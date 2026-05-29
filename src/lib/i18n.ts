@@ -166,6 +166,8 @@ export const messages: Dict = {
   "admin.users": { en: "Users", ar: "المستخدمون", fr: "Utilisateurs" },
   "admin.settings": { en: "Settings", ar: "الإعدادات", fr: "Paramètres" },
   "admin.expenses": { en: "Expenses & Profits", ar: "المصاريف والأرباح", fr: "Dépenses & profits" },
+  "admin.finances": { en: "Finances & Wallet", ar: "المالية والمحفظة", fr: "Finances & portefeuille" },
+  "admin.shipping": { en: "Shipping & Delivery", ar: "الشحن والتوصيل", fr: "Livraison" },
 
   // Footer
   "footer.contact": { en: "Contact", ar: "اتصل بنا", fr: "Contact" },

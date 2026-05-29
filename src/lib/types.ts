@@ -46,11 +46,98 @@ export interface Product {
   image: string;
   rating: number;
   createdAt: string;
+  /**
+   * Volume / wholesale price breaks for this product. Always present as an
+   * array (empty when the product has no tiers) so the cart pricing logic in
+   * `src/lib/cart-utils.ts` and the admin grid never have to branch on
+   * `undefined`. Populated by the DB layer (`listProducts` / `getProduct`)
+   * which batch-loads `product_pricing_tiers`. Optional on write payloads —
+   * tiers are managed through their own endpoint, not the product mutation.
+   */
+  pricingTiers?: ProductPricingTier[];
 }
 
 export interface CartItem {
   productId: string;
   quantity: number;
+}
+
+// ---------------------------------------------------------------------------
+// Per-city shipping rates (`shipping_rates` table).
+//
+// One row per delivery city. `price` is in the store currency (MAD for the
+// Moroccan deployment). `active=false` hides a destination at checkout without
+// losing its configured price.
+// ---------------------------------------------------------------------------
+export interface ShippingRate {
+  id: string;
+  city: string;
+  price: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Micro-ERP expenses (`expenses` table).
+//
+// Every expense row represents cash leaving the business. A DB trigger debits
+// `settings.wallet_balance` on insert (and reverses on delete/edit), so the
+// API never mutates the wallet by hand.
+// ---------------------------------------------------------------------------
+export type ExpenseCategory = "staff" | "marketing" | "logistics" | "others";
+
+/** Canonical, ordered list of expense categories for selects/badges. */
+export const EXPENSE_CATEGORIES: readonly ExpenseCategory[] = [
+  "staff",
+  "marketing",
+  "logistics",
+  "others",
+] as const;
+
+export interface Expense {
+  id: string;
+  title: string;
+  category: ExpenseCategory;
+  amount: number;
+  description: string;
+  createdAt: string;
+}
+
+/**
+ * Financial summary returned by `GET /api/admin/expenses`. Bundling the live
+ * wallet balance with the expense list keeps the dashboard a single fetch and
+ * means the wallet figure reflects the exact same DB read as the table.
+ */
+export interface FinanceSummary {
+  walletBalance: number;
+  expenses: Expense[];
+}
+
+// ---------------------------------------------------------------------------
+// Volume tier pricing (`product_pricing_tiers` table).
+//
+// `maxQuantity === null` denotes an open-ended top tier ("100 and above").
+// At most one open-ended tier may exist per product (enforced by a partial
+// unique index in the migration and by `validatePricingTiers`).
+// ---------------------------------------------------------------------------
+export interface ProductPricingTier {
+  id: string;
+  productId: string;
+  minQuantity: number;
+  maxQuantity: number | null;
+  pricePerItem: number;
+  createdAt: string;
+}
+
+/**
+ * Draft shape used by the admin grid before a tier is persisted. `id` is
+ * absent for unsaved rows and `productId` is supplied by the server on save.
+ */
+export interface ProductPricingTierDraft {
+  minQuantity: number;
+  maxQuantity: number | null;
+  pricePerItem: number;
 }
 
 export type OrderStatus =

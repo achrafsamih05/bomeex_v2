@@ -30,6 +30,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     { href: "/admin/orders", label: t("admin.orders"), icon: "Package" },
     { href: "/admin/invoices", label: t("admin.invoices"), icon: "FileText" },
     { href: "/admin/expenses", label: t("admin.expenses"), icon: "TrendingUp" },
+    { href: "/admin/finances", label: t("admin.finances"), icon: "Wallet" },
     { href: "/admin/users", label: t("admin.users"), icon: "Users" },
     { href: "/admin/settings", label: t("admin.settings"), icon: "Settings" },
   ];

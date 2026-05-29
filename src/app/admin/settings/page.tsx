@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Icon } from "@/components/ui/Icon";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n";
@@ -79,6 +80,22 @@ export default function AdminSettings() {
             </div>
           </section>
         )}
+
+        <Link
+          href="/admin/settings/shipping"
+          className="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 shadow-soft transition hover:border-ink-300"
+        >
+          <span className="grid h-11 w-11 flex-none place-items-center rounded-xl bg-ink-900 text-white">
+            <Icon name="Truck" size={20} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-semibold">Shipping &amp; delivery</h2>
+            <p className="text-sm text-ink-500">
+              Configure per-city delivery fees for your storefront checkout.
+            </p>
+          </div>
+          <Icon name="ChevronRight" size={18} className="flex-none text-ink-400" />
+        </Link>
 
         <form onSubmit={save} className="space-y-6">
           <section className="rounded-2xl border border-ink-100 bg-white p-5 shadow-soft">
