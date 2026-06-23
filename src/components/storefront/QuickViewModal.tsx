@@ -160,9 +160,11 @@ export function QuickViewModal({
         ref={dialogRef}
         tabIndex={-1}
         // w-full + max-w-* + mx-auto => responsive container
+        // max-h + overflow-y-auto => the stacked mobile layout scrolls inside
+        //   the viewport instead of being clipped by the rounded container.
         // animate-pop + shadow-lift => polished entrance
         className={cn(
-          "relative w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-lift",
+          "relative max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl overflow-x-hidden overflow-y-auto rounded-2xl bg-white shadow-lift sm:max-h-[calc(100dvh-3rem)]",
           "focus:outline-none animate-pop"
         )}
       >
@@ -180,9 +182,19 @@ export function QuickViewModal({
         <div className="grid md:grid-cols-2">
           {/* -------------------------------------------------------------
               Image gallery
+
+              `min-w-0` is critical: grid/flex children default to
+              `min-width: auto`, which lets a wide image push the column
+              past the phone's viewport. Pinning it to 0 (plus `w-full`
+              and `overflow-hidden`) forces the gallery to wrap to the
+              screen width instead of breaking the layout out of bounds.
              ------------------------------------------------------------- */}
-          <div className="flex flex-col gap-3 bg-ink-50 p-3 sm:p-4">
-            <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-white">
+          <div className="flex w-full min-w-0 flex-col gap-3 overflow-hidden bg-ink-50 p-3 sm:p-4">
+            {/* Main viewer: a relative box with a fixed aspect ratio so its
+                height is always derived from the responsive width — never a
+                hardcoded pixel size. Slightly shorter (4:3) on phones to keep
+                the whole modal inside the viewport, square from sm+ up. */}
+            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-white sm:aspect-square">
               <GalleryImage
                 key={images[activeIndex]}
                 src={images[activeIndex]}
@@ -216,22 +228,23 @@ export function QuickViewModal({
             </div>
 
             {/* Thumbnail selector — only shown when there's more than one
-                image. Uses a horizontally scrollable row so galleries with
-                many images stay usable on narrow screens. */}
+                image. A responsive grid (4 columns on mobile, 5 from sm+)
+                lets every thumbnail shrink to share the row width instead of
+                overflowing horizontally. */}
             {images.length > 1 && (
               <ul
-                className="flex gap-2 overflow-x-auto pb-1 no-scrollbar"
+                className="grid grid-cols-4 gap-2 sm:grid-cols-5"
                 aria-label="Product thumbnails"
               >
                 {images.map((url, i) => (
-                  <li key={`${url}-${i}`} className="shrink-0">
+                  <li key={`${url}-${i}`} className="min-w-0">
                     <button
                       type="button"
                       onClick={() => setActiveIndex(i)}
                       aria-current={i === activeIndex ? "true" : undefined}
                       aria-label={`Show image ${i + 1}`}
                       className={cn(
-                        "relative block h-16 w-16 overflow-hidden rounded-lg bg-white outline outline-2",
+                        "relative block aspect-square w-full overflow-hidden rounded-lg bg-white outline outline-2",
                         i === activeIndex
                           ? "outline-ink-900"
                           : "outline-transparent hover:outline-ink-300"
@@ -248,7 +261,7 @@ export function QuickViewModal({
           {/* -------------------------------------------------------------
               Details panel
              ------------------------------------------------------------- */}
-          <div className="flex flex-col gap-4 p-4 sm:p-6">
+          <div className="flex min-w-0 flex-col gap-4 p-4 sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2
@@ -449,14 +462,19 @@ function GalleryImage({
       src={current}
       alt={alt}
       fill
-      sizes={small ? "64px" : "(max-width: 768px) 100vw, 50vw"}
+      // Thumbnails are tiny fixed squares; the main image is full viewport
+      // width on phones and roughly half the 4xl modal on md+.
+      sizes={small ? "20vw" : "(max-width: 768px) 100vw, 28rem"}
       unoptimized={failed}
       onError={() => {
         if (failed) return;
         setCurrent(FALLBACK_IMAGE);
         setFailed(true);
       }}
-      className="object-cover"
+      // Main image: `object-contain` keeps the whole product visible and
+      // inside its aspect-ratio box (never scales out of bounds). Thumbnails
+      // use `object-cover` so the small square preview stays filled.
+      className={cn("h-full w-full", small ? "object-cover" : "object-contain")}
     />
   );
 }
