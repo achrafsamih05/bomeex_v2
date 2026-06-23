@@ -79,6 +79,18 @@ export const messages: Dict = {
   "checkout.email": { en: "Email", ar: "البريد الإلكتروني", fr: "E-mail" },
   "checkout.phone": { en: "Phone", ar: "الهاتف", fr: "Téléphone" },
   "checkout.address": { en: "Shipping address", ar: "عنوان الشحن", fr: "Adresse de livraison" },
+  "checkout.city": { en: "Delivery city", ar: "مدينة التوصيل", fr: "Ville de livraison" },
+  "checkout.city.placeholder": {
+    en: "Select your city",
+    ar: "اختر مدينتك",
+    fr: "Choisissez votre ville",
+  },
+  "checkout.city.empty": {
+    en: "No delivery cities are available right now.",
+    ar: "لا توجد مدن متاحة للتوصيل حاليًا.",
+    fr: "Aucune ville de livraison n'est disponible pour le moment.",
+  },
+  "checkout.shipping": { en: "Shipping", ar: "الشحن", fr: "Livraison" },
   "checkout.place": { en: "Place order", ar: "تأكيد الطلب", fr: "Passer la commande" },
   "checkout.or": { en: "— or enter shipping details below —", ar: "— أو أدخل تفاصيل الشحن أدناه —", fr: "— ou saisissez les détails ci-dessous —" },
   "checkout.oneClick.title": {

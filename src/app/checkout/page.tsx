@@ -2,11 +2,16 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StoreShell } from "@/components/storefront/StoreShell";
 import { Icon } from "@/components/ui/Icon";
-import { useMe, useProducts, useSettings } from "@/lib/client/hooks";
+import {
+  useActiveShippingRates,
+  useMe,
+  useProducts,
+  useSettings,
+} from "@/lib/client/hooks";
 import { apiSend } from "@/lib/client/api";
 import { formatCurrency } from "@/lib/format";
 import { useCart } from "@/lib/store/cart";
@@ -19,6 +24,7 @@ export default function CheckoutPage() {
   const clear = useCart((s) => s.clear);
   const { data: products } = useProducts();
   const { data: me } = useMe();
+  const { data: shippingRates } = useActiveShippingRates();
   const settings = useSettings();
   const currency = settings?.currency ?? "USD";
   const taxRate = settings?.taxRate ?? 10;
@@ -26,6 +32,25 @@ export default function CheckoutPage() {
   const [done, setDone] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCity, setSelectedCity] = useState("");
+
+  // The fee for the chosen city. Looked up against the live `active` rates so
+  // a city without a rate (or before any selection) contributes 0.
+  const shippingCost = useMemo(() => {
+    const rate = shippingRates.find((r) => r.city === selectedCity);
+    return rate ? rate.price : 0;
+  }, [shippingRates, selectedCity]);
+
+  // Pre-select the customer's saved city once rates arrive, but only if it's a
+  // currently deliverable destination — otherwise leave the picker empty so
+  // they make an explicit, valid choice.
+  useEffect(() => {
+    if (selectedCity || !me?.city) return;
+    const match = shippingRates.find(
+      (r) => r.city.toLowerCase() === me.city!.toLowerCase()
+    );
+    if (match) setSelectedCity(match.city);
+  }, [me?.city, shippingRates, selectedCity]);
 
   const lines = useMemo(
     () =>
@@ -43,7 +68,7 @@ export default function CheckoutPage() {
     0
   );
   const tax = +(subtotal * (taxRate / 100)).toFixed(2);
-  const total = +(subtotal + tax).toFixed(2);
+  const total = +(subtotal + tax + shippingCost).toFixed(2);
 
   const hasProfileAddress = Boolean(me?.address && me?.phone);
 
@@ -68,6 +93,12 @@ export default function CheckoutPage() {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     setError(null);
+
+    if (!selectedCity) {
+      setError(t("checkout.city.placeholder"));
+      return;
+    }
+
     setSubmitting(true);
     try {
       const order = await apiSend<{ id: string }>("/api/orders", "POST", {
@@ -76,7 +107,10 @@ export default function CheckoutPage() {
           email: data.get("email") ? String(data.get("email")) : undefined,
           phone: String(data.get("phone") ?? ""),
           address: String(data.get("address") ?? ""),
+          city: selectedCity,
         },
+        city: selectedCity,
+        shippingCost,
         items: items.map((i) => ({
           productId: i.productId,
           quantity: i.quantity,
@@ -211,6 +245,18 @@ export default function CheckoutPage() {
                   : undefined
               }
             />
+            <CitySelect
+              label={t("checkout.city")}
+              placeholder={t("checkout.city.placeholder")}
+              emptyHint={t("checkout.city.empty")}
+              value={selectedCity}
+              onChange={setSelectedCity}
+              options={shippingRates.map((r) => ({
+                city: r.city,
+                price: r.price,
+                label: `${r.city} (+${formatCurrency(r.price, locale, currency)})`,
+              }))}
+            />
             {error && (
               <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
                 {error}
@@ -255,6 +301,18 @@ export default function CheckoutPage() {
           <div className="mt-4 space-y-2 border-t border-ink-100 pt-4 text-sm">
             <SummaryRow label={t("cart.subtotal")} value={formatCurrency(subtotal, locale, currency)} />
             <SummaryRow label={`${t("cart.tax").replace(/\(.*\)/, `(${taxRate}%)`)}`} value={formatCurrency(tax, locale, currency)} />
+            <SummaryRow
+              label={
+                selectedCity
+                  ? `${t("checkout.shipping")} · ${selectedCity}`
+                  : t("checkout.shipping")
+              }
+              value={
+                selectedCity
+                  ? formatCurrency(shippingCost, locale, currency)
+                  : "—"
+              }
+            />
             <SummaryRow label={t("cart.total")} value={formatCurrency(total, locale, currency)} bold />
           </div>
         </aside>
@@ -289,6 +347,52 @@ function Field({
         readOnly={readOnly}
         className={`h-11 w-full rounded-xl border border-ink-200 bg-white px-3 text-sm transition focus:border-ink-900 focus:outline-none ${readOnly ? "cursor-not-allowed bg-ink-50 text-ink-500" : ""}`}
       />
+    </label>
+  );
+}
+
+function CitySelect({
+  label,
+  placeholder,
+  emptyHint,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  placeholder: string;
+  emptyHint: string;
+  value: string;
+  onChange: (city: string) => void;
+  options: { city: string; price: number; label: string }[];
+}) {
+  const disabled = options.length === 0;
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm text-ink-600">{label}</span>
+      <div className="relative">
+        <select
+          name="city"
+          required
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-11 w-full appearance-none rounded-xl border border-ink-200 bg-white px-3 pr-9 text-sm transition focus:border-ink-900 focus:outline-none disabled:cursor-not-allowed disabled:bg-ink-50 disabled:text-ink-400"
+        >
+          <option value="" disabled>
+            {placeholder}
+          </option>
+          {options.map((o) => (
+            <option key={o.city} value={o.city}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-400">
+          <Icon name="ChevronDown" size={16} />
+        </span>
+      </div>
+      {disabled && <p className="mt-1 text-xs text-ink-500">{emptyHint}</p>}
     </label>
   );
 }

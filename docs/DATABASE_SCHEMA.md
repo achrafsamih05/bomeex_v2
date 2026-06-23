@@ -118,6 +118,8 @@ create table orders (
   customer_email    text not null,
   customer_phone    text,
   customer_address  text not null,
+  shipping_city     text not null default '',     -- delivery city (FK-by-name to shipping_rates.city)
+  shipping_cost     numeric(12, 2) not null default 0,  -- flat fee captured at checkout
   subtotal          numeric(12, 2) not null,
   tax               numeric(12, 2) not null,
   total             numeric(12, 2) not null,

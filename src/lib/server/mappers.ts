@@ -54,7 +54,7 @@ export const USER_COLUMNS =
 
 export const ORDER_COLUMNS =
   "id, user_id, customer_name, customer_email, customer_phone, customer_address, " +
-  "subtotal, tax, total, status, created_at";
+  "shipping_city, shipping_cost, subtotal, tax, total, status, created_at";
 
 export const ORDER_ITEM_COLUMNS =
   "id, order_id, product_id, name, quantity, price";
@@ -365,6 +365,8 @@ export interface OrderRow {
   customer_email: string | null;
   customer_phone: string;
   customer_address: string;
+  shipping_city: string | null;
+  shipping_cost: number | string | null;
   subtotal: number | string;
   tax: number | string;
   total: number | string;
@@ -390,6 +392,7 @@ export function orderFromRow(r: OrderRow, items: OrderItemRow[]): Order {
       email: r.customer_email ?? undefined,
       phone: r.customer_phone ?? "",
       address: r.customer_address,
+      city: r.shipping_city ?? undefined,
     },
     items: items
       .filter((i) => i.order_id === r.id)
@@ -399,6 +402,8 @@ export function orderFromRow(r: OrderRow, items: OrderItemRow[]): Order {
         quantity: num(i.quantity),
         price: num(i.price),
       })),
+    shippingCity: r.shipping_city ?? "",
+    shippingCost: num(r.shipping_cost ?? 0),
     subtotal: num(r.subtotal),
     tax: num(r.tax),
     total: num(r.total),

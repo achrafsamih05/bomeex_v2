@@ -341,6 +341,8 @@ export async function createOrder(o: Order): Promise<void> {
     customer_email: o.customer.email || null,
     customer_phone: o.customer.phone,
     customer_address: o.customer.address,
+    shipping_city: o.shippingCity,
+    shipping_cost: o.shippingCost,
     subtotal: o.subtotal,
     tax: o.tax,
     total: o.total,
@@ -380,6 +382,8 @@ export async function updateOrder(
     row.customer_phone = patch.customer.phone;
     row.customer_address = patch.customer.address;
   }
+  if (patch.shippingCity !== undefined) row.shipping_city = patch.shippingCity;
+  if (patch.shippingCost !== undefined) row.shipping_cost = patch.shippingCost;
   // Allow admins to edit money fields directly when they reprice an order.
   // Validation lives in the API route — db.ts only persists what it's given.
   if (patch.subtotal !== undefined) row.subtotal = patch.subtotal;
@@ -689,6 +693,21 @@ export async function listShippingRates(): Promise<ShippingRate[]> {
     .select(SHIPPING_RATE_COLUMNS)
     .order("city", { ascending: true });
   if (error) raise("listShippingRates", error);
+  return ((data ?? []) as unknown as ShippingRateRow[]).map(shippingRateFromRow);
+}
+
+/**
+ * Active-only variant for the public storefront. The admin list returns every
+ * configured city (including disabled ones), but checkout must only ever offer
+ * destinations the store currently delivers to.
+ */
+export async function listActiveShippingRates(): Promise<ShippingRate[]> {
+  const { data, error } = await sb()
+    .from("shipping_rates")
+    .select(SHIPPING_RATE_COLUMNS)
+    .eq("active", true)
+    .order("city", { ascending: true });
+  if (error) raise("listActiveShippingRates", error);
   return ((data ?? []) as unknown as ShippingRateRow[]).map(shippingRateFromRow);
 }
 

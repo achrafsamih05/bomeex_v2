@@ -133,6 +133,8 @@ create table if not exists public.orders (
   customer_email    text,
   customer_phone    text not null,
   customer_address  text not null,
+  shipping_city     text not null default '',
+  shipping_cost     numeric(12, 2) not null default 0 check (shipping_cost >= 0),
   subtotal          numeric(12, 2) not null,
   tax               numeric(12, 2) not null,
   total             numeric(12, 2) not null,

@@ -4,6 +4,7 @@ import {
   createOrder,
   getProduct,
   getSettings,
+  listActiveShippingRates,
   listOrders,
   nextInvoiceId,
   nextOrderId,
@@ -31,20 +32,27 @@ export const GET = () =>
 export const POST = (req: NextRequest) =>
   handle(async () => {
     const body = await req.json();
-    const { customer: customerIn, items, useProfile } = body as {
+    const { customer: customerIn, items, useProfile, city: cityIn } = body as {
       customer?: Order["customer"];
       items: { productId: string; quantity: number }[];
       useProfile?: boolean;
+      city?: string;
     };
 
     const user = await getCurrentUser();
     let customer = customerIn;
+    // The shipping city drives the delivery fee. For one-click it comes from
+    // the saved profile; for the guest/manual form it's posted explicitly.
+    let shippingCity =
+      typeof cityIn === "string" ? cityIn.trim() : "";
 
     if (useProfile) {
       if (!user) httpError(401, "Must be logged in to use saved profile");
       if (!user!.address || !user!.phone) {
         httpError(400, "Profile missing shipping details");
       }
+      if (!user!.city) httpError(400, "Profile missing delivery city");
+      shippingCity = user!.city!.trim();
       customer = {
         name: user!.name,
         email: user!.email,
@@ -52,6 +60,7 @@ export const POST = (req: NextRequest) =>
         address: [user!.address, user!.city, user!.postalCode, user!.country]
           .filter(Boolean)
           .join(", "),
+        city: shippingCity,
       };
     }
 
@@ -60,6 +69,21 @@ export const POST = (req: NextRequest) =>
     if (!customer?.phone || !customer?.name || !Array.isArray(items) || items.length === 0) {
       httpError(400, "customer (name + phone) and non-empty items are required");
     }
+
+    if (!shippingCity) httpError(400, "A delivery city is required");
+
+    // Resolve the shipping fee server-side from the active rate table — never
+    // trust a price sent by the client. Matching the selected city to a live
+    // `active` rate also rejects stale or spoofed destinations.
+    const rates = await listActiveShippingRates();
+    const rate = rates.find(
+      (r) => r.city.toLowerCase() === shippingCity.toLowerCase()
+    );
+    if (!rate) httpError(400, "Selected city is not available for delivery");
+    const shippingCost = rate!.price;
+    // Normalise to the canonical casing stored in `shipping_rates`.
+    shippingCity = rate!.city;
+    customer = { ...customer!, city: shippingCity };
 
     const orderItems: Order["items"] = [];
     for (const it of items) {
@@ -84,7 +108,7 @@ export const POST = (req: NextRequest) =>
       .reduce((s, i) => s + i.price * i.quantity, 0)
       .toFixed(2);
     const tax = +(subtotal * (settings.taxRate / 100)).toFixed(2);
-    const total = +(subtotal + tax).toFixed(2);
+    const total = +(subtotal + tax + shippingCost).toFixed(2);
 
     const orderId = await nextOrderId();
     const order: Order = {
@@ -94,6 +118,8 @@ export const POST = (req: NextRequest) =>
       items: orderItems,
       subtotal,
       tax,
+      shippingCity,
+      shippingCost,
       total,
       status: "pending",
       createdAt: new Date().toISOString(),

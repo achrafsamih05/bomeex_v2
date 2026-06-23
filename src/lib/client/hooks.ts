@@ -196,6 +196,33 @@ export function useShippingRates() {
   return { data, loading, error, reload };
 }
 
+// ---- shipping rates (public storefront) ----
+//
+// Reads the public `/api/shipping` endpoint, which already filters to
+// `active === true`. Used by the checkout city picker so guests (who have no
+// admin session) can still see live delivery destinations and prices. Stays
+// in sync with admin edits via the same `shipping` realtime channel.
+export function useActiveShippingRates() {
+  const [data, setData] = useState<ShippingRate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(async () => {
+    try {
+      setError(null);
+      setData(await apiGet<ShippingRate[]>("/api/shipping"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    reload();
+  }, [reload]);
+  useRealtime(["shipping"], reload);
+  return { data, loading, error, reload };
+}
+
 // ---- finances: wallet balance + expenses (admin) ----
 //
 // Listens on BOTH the `expenses` channel (a logged cost debits the wallet) and

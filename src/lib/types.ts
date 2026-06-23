@@ -172,6 +172,12 @@ export interface Order {
   }[];
   subtotal: number;
   tax: number;
+  /** Delivery city the customer selected at checkout (mirrors a row in
+   *  `shipping_rates`). Persisted on the order so historical totals stay
+   *  reproducible even if the city's rate later changes. */
+  shippingCity: string;
+  /** Flat shipping fee for `shippingCity`, in the store currency. */
+  shippingCost: number;
   total: number;
   status: OrderStatus;
   createdAt: string;
