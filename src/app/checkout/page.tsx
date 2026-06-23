@@ -14,6 +14,7 @@ import {
 } from "@/lib/client/hooks";
 import { apiSend } from "@/lib/client/api";
 import { formatCurrency } from "@/lib/format";
+import { calculateItemEffectivePrice } from "@/lib/cart-utils";
 import { useCart } from "@/lib/store/cart";
 import { useI18n } from "@/lib/useI18n";
 
@@ -57,16 +58,25 @@ export default function CheckoutPage() {
       items
         .map((i) => {
           const p = products.find((x) => x.id === i.productId);
-          return p ? { product: p, quantity: i.quantity } : null;
+          if (!p) return null;
+          // Apply wholesale volume pricing: the unit price drops to the
+          // matching tier's `pricePerItem` when the quantity qualifies. This
+          // mirrors the server's authoritative calc in POST /api/orders so the
+          // summary the customer sees matches what's persisted to order_items.
+          const pricing = calculateItemEffectivePrice(
+            p,
+            i.quantity,
+            p.pricingTiers ?? []
+          );
+          return { product: p, quantity: i.quantity, pricing };
         })
         .filter((x): x is NonNullable<typeof x> => !!x),
     [items, products]
   );
 
-  const subtotal = lines.reduce(
-    (s, { product, quantity }) => s + product.price * quantity,
-    0
-  );
+  const subtotal = +lines
+    .reduce((s, { pricing }) => s + pricing.lineTotal, 0)
+    .toFixed(2);
   const tax = +(subtotal * (taxRate / 100)).toFixed(2);
   const total = +(subtotal + tax + shippingCost).toFixed(2);
 
@@ -275,7 +285,7 @@ export default function CheckoutPage() {
         <aside className="h-max rounded-2xl border border-ink-100 bg-white p-6 shadow-soft">
           <h2 className="mb-4 text-base font-semibold">{t("cart.title")}</h2>
           <ul className="space-y-3">
-            {lines.map(({ product, quantity }) => (
+            {lines.map(({ product, quantity, pricing }) => (
               <li key={product.id} className="flex gap-3">
                 <div className="relative h-14 w-14 overflow-hidden rounded-lg bg-ink-50">
                   <Image
@@ -290,10 +300,17 @@ export default function CheckoutPage() {
                   <div className="line-clamp-1 font-medium">
                     {product.name[locale]}
                   </div>
-                  <div className="text-ink-500">×{quantity}</div>
+                  <div className="text-ink-500">
+                    ×{quantity}
+                    {pricing.isWholesale && (
+                      <span className="ms-1 text-ink-400">
+                        @ {formatCurrency(pricing.unitPrice, locale, currency)}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="text-sm font-semibold">
-                  {formatCurrency(product.price * quantity, locale, currency)}
+                  {formatCurrency(pricing.lineTotal, locale, currency)}
                 </div>
               </li>
             ))}
