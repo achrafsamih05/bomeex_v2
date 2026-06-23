@@ -178,7 +178,11 @@ export default function CheckoutPage() {
 
   return (
     <StoreShell>
-      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+      {/* Single fluid document scroll: explicitly stack in one column on
+          mobile (grid-cols-1) and split into form + summary from lg+. `h-auto`
+          + `overscroll-y-contain` let the natural page scroll own the gesture
+          on iOS/Android — no nested/double scroll, no viewport-height lock. */}
+      <div className="grid h-auto grid-cols-1 gap-6 overscroll-y-contain lg:grid-cols-[1fr_380px]">
         <section className="rounded-2xl border border-ink-100 bg-white p-6 shadow-soft">
           <h1 className="mb-5 text-2xl font-semibold tracking-tight">
             {t("checkout.title")}
@@ -282,7 +286,7 @@ export default function CheckoutPage() {
           </form>
         </section>
 
-        <aside className="h-max rounded-2xl border border-ink-100 bg-white p-6 shadow-soft">
+        <aside className="h-max rounded-2xl border border-ink-100 bg-white p-6 shadow-soft lg:sticky lg:top-24">
           <h2 className="mb-4 text-base font-semibold">{t("cart.title")}</h2>
           <ul className="space-y-3">
             {lines.map(({ product, quantity, pricing }) => (
