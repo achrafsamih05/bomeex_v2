@@ -168,7 +168,7 @@ export function QuickViewModal({
         //   mobile, pops in on desktop).
         className={cn(
           "relative w-full max-w-full overflow-x-hidden overflow-y-auto bg-white shadow-lift",
-          "max-h-[80vh] rounded-t-2xl animate-slide-up",
+          "max-h-[90vh] rounded-t-2xl animate-slide-up",
           "sm:max-w-lg sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl sm:animate-pop",
           "md:max-w-2xl lg:max-w-4xl",
           "focus:outline-none"
@@ -198,11 +198,9 @@ export function QuickViewModal({
           <div className="flex w-full min-w-0 flex-col gap-3 overflow-hidden bg-ink-50 p-3 sm:p-4">
             {/* Main viewer: a relative box with a fixed aspect ratio so its
                 height is always derived from the responsive width — never a
-                hardcoded pixel size. On phones we additionally cap the height
-                (`max-h-[30vh]`) and center the box so the image stays small
-                and more product info sits above the fold; from sm+ it relaxes
-                to a full square. */}
-            <div className="relative mx-auto aspect-[4/3] max-h-[30vh] w-full overflow-hidden rounded-xl bg-white sm:aspect-square sm:max-h-none">
+                hardcoded pixel size. Slightly shorter (4:3) on phones to keep
+                the whole modal inside the viewport, square from sm+ up. */}
+            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-white sm:aspect-square">
               <GalleryImage
                 key={images[activeIndex]}
                 src={images[activeIndex]}
@@ -268,14 +266,8 @@ export function QuickViewModal({
 
           {/* -------------------------------------------------------------
               Details panel
-
-              `overflow-y-auto` + a mobile max-height lets the title, price,
-              wholesale tiers and quantity controls scroll within the panel
-              on small phones, so the action buttons stay reachable even when
-              the image takes its share of the sheet. Padding is the tighter
-              `p-4` on mobile, relaxing to `p-6` from sm+.
              ------------------------------------------------------------- */}
-          <div className="flex min-w-0 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+          <div className="flex min-w-0 flex-col gap-4 p-4 sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2
