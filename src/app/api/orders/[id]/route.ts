@@ -1,8 +1,13 @@
 import { NextRequest } from "next/server";
-import { getOrder, updateOrder } from "@/lib/server/db";
+import {
+  adjustStockForItems,
+  getOrder,
+  updateOrder,
+} from "@/lib/server/db";
 import { getCurrentUser } from "@/lib/server/auth";
 import { emit } from "@/lib/server/bus";
 import { handle, httpError } from "@/lib/server/http";
+import { stockTransition } from "@/lib/order-stock";
 import type { Order, OrderStatus, ShippingAddress } from "@/lib/types";
 
 const VALID: OrderStatus[] = [
@@ -60,6 +65,12 @@ export const PATCH = (
       unknown
     > | null;
     if (!body) httpError(400, "Invalid body");
+
+    // Load the current order up-front: we need its previous status to decide
+    // whether this update crosses a stock-commitment boundary, and its items
+    // (the canonical persisted lines) to know exactly what to deduct/restore.
+    const existing = await getOrder(params.id);
+    if (!existing) httpError(404, "Not found");
 
     const patch: Partial<Order> = {};
 
@@ -144,6 +155,28 @@ export const PATCH = (
 
     const updated = await updateOrder(params.id, patch);
     if (!updated) httpError(404, "Not found");
+
+    // --- inventory flow ---
+    // If this update changed the status, move stock accordingly. We use the
+    // order's persisted items as the source of truth for quantities. When the
+    // same request also replaced the items, the freshly-saved lines (`updated`)
+    // are what we deduct/restore against.
+    if (patch.status !== undefined && patch.status !== existing!.status) {
+      const direction = stockTransition(existing!.status, patch.status);
+      if (direction) {
+        const changed = await adjustStockForItems(
+          updated!.items.map((i) => ({
+            productId: i.productId,
+            quantity: i.quantity,
+          })),
+          direction
+        );
+        for (const productId of changed) {
+          emit({ channel: "products", action: "updated", id: productId });
+        }
+      }
+    }
+
     emit({ channel: "orders", action: "updated", id: params.id });
     return updated;
   });

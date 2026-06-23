@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Icon } from "@/components/ui/Icon";
 import { apiSend } from "@/lib/client/api";
@@ -59,23 +60,32 @@ export default function OrdersAdminPage() {
           </p>
         </header>
 
-        <div className="flex flex-wrap gap-2">
-          <Chip
-            active={filter === "all"}
-            onClick={() => setFilter("all")}
-            label={`All (${orders.length})`}
-          />
-          {STATUSES.map((s) => {
-            const c = orders.filter((o) => o.status === s).length;
-            return (
-              <Chip
-                key={s}
-                active={filter === s}
-                onClick={() => setFilter(s)}
-                label={`${label(s)} (${c})`}
-              />
-            );
-          })}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            <Chip
+              active={filter === "all"}
+              onClick={() => setFilter("all")}
+              label={`All (${orders.length})`}
+            />
+            {STATUSES.map((s) => {
+              const c = orders.filter((o) => o.status === s).length;
+              return (
+                <Chip
+                  key={s}
+                  active={filter === s}
+                  onClick={() => setFilter(s)}
+                  label={`${label(s)} (${c})`}
+                />
+              );
+            })}
+          </div>
+          <Link
+            href="/admin/orders/create"
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-ink-900 px-4 text-sm font-medium text-white hover:bg-ink-800"
+          >
+            <Icon name="Plus" size={16} />
+            Create order
+          </Link>
         </div>
 
         {/*

@@ -194,6 +194,41 @@ export async function deleteProduct(id: string): Promise<Product | null> {
 }
 
 /**
+ * Adjust on-hand stock for a set of order lines, used by the order-status
+ * inventory flow (deduct when an order is fulfilled / processing, restore when
+ * a previously-committed order is cancelled).
+ *
+ *   - "deduct"  → stock = max(0, stock − quantity). Clamping at zero enforces
+ *                 the "never below zero" constraint when an order quantity
+ *                 exceeds what's currently on hand.
+ *   - "restore" → stock = stock + quantity. The exact ordered amount is added
+ *                 back so a cancellation returns inventory cleanly.
+ *
+ * Returns the ids of the products whose stock actually changed, so the caller
+ * can emit realtime `products` events for just those rows.
+ */
+export async function adjustStockForItems(
+  items: ReadonlyArray<{ productId: string; quantity: number }>,
+  direction: "deduct" | "restore"
+): Promise<string[]> {
+  const changed: string[] = [];
+  for (const it of items) {
+    const qty = Math.max(0, Math.floor(it.quantity));
+    if (qty === 0) continue;
+    const product = await getProduct(it.productId);
+    if (!product) continue;
+    const nextStock =
+      direction === "deduct"
+        ? Math.max(0, product.stock - qty)
+        : product.stock + qty;
+    if (nextStock === product.stock) continue;
+    await updateProduct(product.id, { stock: nextStock });
+    changed.push(product.id);
+  }
+  return changed;
+}
+
+/**
  * Generates a globally-unique product id.
  *
  * Replaces the legacy "p-001 / p-002 / …" sequential scheme, which had two

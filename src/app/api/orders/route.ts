@@ -8,11 +8,11 @@ import {
   listOrders,
   nextInvoiceId,
   nextOrderId,
-  updateProduct,
 } from "@/lib/server/db";
 import { getCurrentUser } from "@/lib/server/auth";
 import { emit } from "@/lib/server/bus";
 import { handle, httpError } from "@/lib/server/http";
+import { calculateItemEffectivePrice } from "@/lib/cart-utils";
 import type { Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -89,16 +89,20 @@ export const POST = (req: NextRequest) =>
     for (const it of items) {
       const p = await getProduct(it.productId);
       if (!p) continue;
+      // Quantity is bounded by available stock so we never sell more than we
+      // hold, but stock is NOT deducted here — deduction is deferred until the
+      // order is moved to `processing` (see PATCH /api/orders/:id).
       const qty = Math.max(1, Math.min(it.quantity, p.stock));
       if (qty <= 0) continue;
+      // Apply wholesale volume pricing: the unit price drops to the matching
+      // tier's `pricePerItem` when the quantity qualifies, otherwise retail.
+      const pricing = calculateItemEffectivePrice(p, qty, p.pricingTiers ?? []);
       orderItems.push({
         productId: p.id,
         name: p.name.en,
         quantity: qty,
-        price: p.price,
+        price: pricing.unitPrice,
       });
-      await updateProduct(p.id, { stock: p.stock - qty });
-      emit({ channel: "products", action: "updated", id: p.id });
     }
 
     if (orderItems.length === 0) httpError(400, "No purchasable items");
