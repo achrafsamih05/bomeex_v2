@@ -55,6 +55,10 @@ const config: Config = {
           from: { transform: "translateX(-100%)" },
           to: { transform: "translateX(0)" },
         },
+        "slide-up": {
+          from: { transform: "translateY(100%)", opacity: "0" },
+          to: { transform: "translateY(0)", opacity: "1" },
+        },
         pop: {
           "0%": { transform: "scale(0.8)", opacity: "0" },
           "100%": { transform: "scale(1)", opacity: "1" },
@@ -64,6 +68,7 @@ const config: Config = {
         "fade-in": "fade-in 180ms ease-out",
         "slide-in-right": "slide-in-right 220ms ease-out",
         "slide-in-left": "slide-in-left 220ms ease-out",
+        "slide-up": "slide-up 240ms ease-out",
         pop: "pop 180ms ease-out",
       },
     },

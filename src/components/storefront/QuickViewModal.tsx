@@ -143,7 +143,7 @@ export function QuickViewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-6 animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="quickview-title"
@@ -159,13 +159,19 @@ export function QuickViewModal({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        // w-full + max-w-* + mx-auto => responsive container
-        // max-h + overflow-y-auto => the stacked mobile layout scrolls inside
-        //   the viewport instead of being clipped by the rounded container.
-        // animate-pop + shadow-lift => polished entrance
+        // Responsive sizing ladder: full-width bottom-drawer on phones
+        //   (rounded only at the top, flush to the bottom edge), stepping up
+        //   to a centered, progressively wider dialog on larger screens.
+        // max-h-[90vh] + overflow-y-auto => contents scroll inside the sheet
+        //   instead of overflowing the viewport or being clipped.
+        // animate-* + shadow-lift => polished entrance (drawer slides up on
+        //   mobile, pops in on desktop).
         className={cn(
-          "relative max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl overflow-x-hidden overflow-y-auto rounded-2xl bg-white shadow-lift sm:max-h-[calc(100dvh-3rem)]",
-          "focus:outline-none animate-pop"
+          "relative w-full max-w-full overflow-x-hidden overflow-y-auto bg-white shadow-lift",
+          "max-h-[90vh] rounded-t-2xl animate-slide-up",
+          "sm:max-w-lg sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl sm:animate-pop",
+          "md:max-w-2xl lg:max-w-4xl",
+          "focus:outline-none"
         )}
       >
         {/* Close button floats in the top-end corner so it survives both LTR
