@@ -7,6 +7,7 @@ import { Icon } from "../ui/Icon";
 import { useCart } from "@/lib/store/cart";
 import { useProducts, useSettings } from "@/lib/client/hooks";
 import { formatCurrency } from "@/lib/format";
+import { calculateItemEffectivePrice } from "@/lib/cart-utils";
 import { useI18n } from "@/lib/useI18n";
 import { cn } from "@/lib/utils";
 
@@ -37,17 +38,21 @@ export function CartDrawer() {
       .map((i) => {
         const product = products.find((p) => p.id === i.productId);
         if (!product) return null;
-        return { item: i, product };
+        // Effective price folds in any wholesale tier the quantity unlocks.
+        const pricing = calculateItemEffectivePrice(
+          product,
+          i.quantity,
+          product.pricingTiers ?? []
+        );
+        return { item: i, product, pricing };
       })
       .filter((x): x is NonNullable<typeof x> => !!x);
   }, [items, products]);
 
-  const subtotal = lines.reduce(
-    (s, { item, product }) => s + product.price * item.quantity,
-    0
-  );
+  const subtotal = lines.reduce((s, { pricing }) => s + pricing.lineTotal, 0);
   const tax = +(subtotal * (taxRate / 100)).toFixed(2);
   const total = +(subtotal + tax).toFixed(2);
+  const anyWholesale = lines.some(({ pricing }) => pricing.isWholesale);
 
   if (!isOpen) return null;
 
@@ -92,7 +97,7 @@ export function CartDrawer() {
         ) : (
           <>
             <ul className="flex-1 divide-y divide-ink-100 overflow-y-auto">
-              {lines.map(({ item, product }) => (
+              {lines.map(({ item, product, pricing }) => (
                 <li key={product.id} className="flex gap-3 p-4">
                   <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-ink-50">
                     <Image
@@ -116,6 +121,38 @@ export function CartDrawer() {
                         <Icon name="Trash2" size={16} />
                       </button>
                     </div>
+
+                    {/* Active pricing mode. When the quantity unlocks a
+                        wholesale tier we cross out the retail unit price and
+                        surface the live wholesale unit price + a small badge. */}
+                    <div className="mt-1 flex items-center gap-2 text-xs">
+                      {pricing.isWholesale ? (
+                        <>
+                          <span className="text-ink-400 line-through tabular-nums">
+                            {formatCurrency(
+                              pricing.retailUnitPrice,
+                              locale,
+                              currency
+                            )}
+                          </span>
+                          <span className="font-semibold text-black tabular-nums">
+                            {formatCurrency(pricing.unitPrice, locale, currency)}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-ink-900 px-2 py-0.5 text-[10px] font-medium text-white">
+                            <Icon name="Layers" size={10} />
+                            {t("product.wholesale")}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-ink-500 tabular-nums">
+                          {formatCurrency(pricing.unitPrice, locale, currency)}
+                          <span className="text-ink-400">
+                            {t("product.perItem")}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+
                     <div className="mt-auto flex items-center justify-between pt-2">
                       <div className="inline-flex items-center rounded-xl border border-ink-200">
                         <button
@@ -140,8 +177,8 @@ export function CartDrawer() {
                           <Icon name="Plus" size={14} />
                         </button>
                       </div>
-                      <span className="text-sm font-semibold">
-                        {formatCurrency(product.price * item.quantity, locale, currency)}
+                      <span className="text-sm font-semibold tabular-nums text-black">
+                        {formatCurrency(pricing.lineTotal, locale, currency)}
                       </span>
                     </div>
                   </div>
@@ -152,11 +189,25 @@ export function CartDrawer() {
             <div className="border-t border-ink-100 p-4 space-y-2">
               <Row label={t("cart.subtotal")} value={formatCurrency(subtotal, locale, currency)} />
               <Row label={`${t("cart.tax").replace(/\(.*\)/, `(${taxRate}%)`)}`} value={formatCurrency(tax, locale, currency)} />
+              {/* Shipping is destination-based (see shipping_rates / the city
+                  picker on checkout). The cart has no city yet, so we show the
+                  line explicitly but defer the amount to checkout. */}
+              <Row
+                label={t("cart.shipping")}
+                value={t("cart.shippingAtCheckout")}
+                muted
+              />
               <Row
                 label={t("cart.total")}
                 value={formatCurrency(total, locale, currency)}
                 bold
               />
+              {anyWholesale && (
+                <p className="flex items-center gap-1 pt-1 text-xs font-medium text-emerald-600">
+                  <Icon name="Layers" size={12} />
+                  {t("cart.wholesaleApplied")}
+                </p>
+              )}
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={clear}
@@ -185,10 +236,12 @@ function Row({
   label,
   value,
   bold,
+  muted,
 }: {
   label: string;
   value: string;
   bold?: boolean;
+  muted?: boolean;
 }) {
   return (
     <div
@@ -198,7 +251,9 @@ function Row({
       )}
     >
       <span>{label}</span>
-      <span>{value}</span>
+      <span className={cn(muted && "text-xs font-normal text-ink-400")}>
+        {value}
+      </span>
     </div>
   );
 }

@@ -221,6 +221,7 @@ function InvoiceSheet({
   }));
   const subtotal = order.subtotal;
   const tax = order.tax;
+  const shipping = order.shippingCost;
   const total = invoice.amount;
 
   return (
@@ -392,6 +393,19 @@ function InvoiceSheet({
                 </dt>
                 <dd className="font-medium tabular-nums">
                   {formatCurrency(tax, locale, currency)}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <dt className="text-ink-500">
+                  {t("invoice.shipping")}
+                  {order.shippingCity && (
+                    <span className="ms-1 text-xs text-ink-400">
+                      ({order.shippingCity})
+                    </span>
+                  )}
+                </dt>
+                <dd className="font-medium tabular-nums">
+                  {formatCurrency(shipping, locale, currency)}
                 </dd>
               </div>
               <div className="mt-2 flex items-baseline justify-between border-t border-ink-900 pt-2 text-base">

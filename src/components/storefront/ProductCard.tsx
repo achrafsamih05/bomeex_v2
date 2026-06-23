@@ -8,8 +8,33 @@ import { toast } from "@/lib/store/toast";
 import { useSettings } from "@/lib/client/hooks";
 import { formatCurrency } from "@/lib/format";
 import { useI18n } from "@/lib/useI18n";
-import type { Product } from "@/lib/types";
+import type { Product, ProductPricingTier } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+/**
+ * Pick the wholesale tier worth advertising on the card: the one with the
+ * lowest unit price (the best deal), tie-broken by the smallest quantity
+ * needed to unlock it. Returns null when the product has no tier that beats
+ * retail, so we simply don't render a wholesale line.
+ */
+function bestWholesaleTier(
+  retailPrice: number,
+  tiers: readonly ProductPricingTier[]
+): ProductPricingTier | null {
+  let best: ProductPricingTier | null = null;
+  for (const tier of tiers) {
+    if (tier.pricePerItem >= retailPrice) continue;
+    if (
+      best === null ||
+      tier.pricePerItem < best.pricePerItem ||
+      (tier.pricePerItem === best.pricePerItem &&
+        tier.minQuantity < best.minQuantity)
+    ) {
+      best = tier;
+    }
+  }
+  return best;
+}
 
 // Shipped placeholder used when the real image fails to load. Living in
 // /public means it's always served from the same origin, so it can never
@@ -33,6 +58,12 @@ export function ProductCard({
   const settings = useSettings();
   const currency = settings?.currency ?? "USD";
   const outOfStock = product.stock <= 0;
+
+  // Best wholesale break to advertise on the card (null when none beats retail).
+  const wholesale = bestWholesaleTier(
+    product.price,
+    product.pricingTiers ?? []
+  );
 
   // ---------------------------------------------------------------------------
   // Image handling (unchanged from the pre-Quick-View version).
@@ -142,9 +173,14 @@ export function ProductCard({
         </p>
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <span className="text-base font-semibold tracking-tight sm:text-lg">
-            {formatCurrency(product.price, locale, currency)}
-          </span>
+          <div className="flex flex-col">
+            <span className="text-base font-semibold tracking-tight text-black sm:text-lg">
+              {formatCurrency(product.price, locale, currency)}
+            </span>
+            <span className="text-[11px] font-medium text-ink-500">
+              {t("product.retail")}
+            </span>
+          </div>
           <span
             className={cn(
               "text-xs font-medium",
@@ -154,6 +190,34 @@ export function ProductCard({
             {outOfStock ? t("product.outOfStock") : t("product.inStock")}
           </span>
         </div>
+
+        {/*
+         * Wholesale price break. Only rendered when the product has a tier
+         * that actually beats retail, so customers see a real "buy more, save
+         * more" offer rather than an empty placeholder. The unit price + the
+         * minimum quantity to unlock it are both shown, e.g.
+         * "Wholesale: 50 MAD/item for 10+ pcs".
+         */}
+        {wholesale && (
+          <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-ink-100 bg-ink-50 px-3 py-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-ink-500">
+              <Icon name="Layers" size={12} />
+              {t("product.wholesale")}
+            </span>
+            <span className="text-right text-xs font-semibold text-black">
+              {formatCurrency(wholesale.pricePerItem, locale, currency)}
+              <span className="font-normal text-ink-500">
+                {t("product.perItem")}
+              </span>{" "}
+              <span className="font-normal text-ink-500">
+                {t("product.wholesaleFrom").replace(
+                  "{min}",
+                  String(wholesale.minQuantity)
+                )}
+              </span>
+            </span>
+          </div>
+        )}
 
         {/*
          * Add-to-cart stays as a separate, explicit action. We stop the

@@ -7,6 +7,7 @@ import { useCart } from "@/lib/store/cart";
 import { toast } from "@/lib/store/toast";
 import { useSettings } from "@/lib/client/hooks";
 import { formatCurrency } from "@/lib/format";
+import { calculateItemEffectivePrice, sortTiers } from "@/lib/cart-utils";
 import { useI18n } from "@/lib/useI18n";
 import type { Product } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -61,6 +62,18 @@ export function QuickViewModal({
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
+
+  // Wholesale tiers, ordered low→high for the "buy more, save more" table.
+  const tiers = useMemo(
+    () => sortTiers(product.pricingTiers ?? []),
+    [product.pricingTiers]
+  );
+  // Live effective price for the currently selected quantity. Drops from
+  // retail to a wholesale unit price the moment the quantity crosses a slab.
+  const pricing = useMemo(
+    () => calculateItemEffectivePrice(product, quantity, tiers),
+    [product, quantity, tiers]
+  );
 
   // Reset the gallery when the modal opens for a different product.
   useEffect(() => {
@@ -253,9 +266,20 @@ export function QuickViewModal({
             </div>
 
             <div className="flex items-baseline gap-3">
-              <span className="text-2xl font-semibold tracking-tight text-ink-900">
-                {formatCurrency(product.price, locale, currency)}
-              </span>
+              {pricing.isWholesale ? (
+                <>
+                  <span className="text-2xl font-semibold tracking-tight text-black">
+                    {formatCurrency(pricing.unitPrice, locale, currency)}
+                  </span>
+                  <span className="text-base text-ink-400 line-through tabular-nums">
+                    {formatCurrency(pricing.retailUnitPrice, locale, currency)}
+                  </span>
+                </>
+              ) : (
+                <span className="text-2xl font-semibold tracking-tight text-black">
+                  {formatCurrency(product.price, locale, currency)}
+                </span>
+              )}
               <span
                 className={cn(
                   "text-xs font-medium",
@@ -266,6 +290,69 @@ export function QuickViewModal({
                 {!outOfStock && product.stock <= 10 && ` · ${product.stock}`}
               </span>
             </div>
+
+            {/* Retail vs. wholesale breakdown. Each configured tier is listed
+                with its unlock quantity and unit price; the slab matching the
+                current quantity is highlighted so the shopper sees exactly
+                which price they're getting and how many more to buy for the
+                next break. Only rendered for products that actually have
+                wholesale tiers. */}
+            {tiers.length > 0 && (
+              <div className="rounded-xl border border-ink-100 bg-white">
+                <div className="flex items-center gap-1.5 border-b border-ink-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-500">
+                  <Icon name="Layers" size={12} />
+                  {t("product.wholesale")}
+                </div>
+                <ul className="divide-y divide-ink-100">
+                  <li className="flex items-center justify-between px-3 py-2 text-sm">
+                    <span className="text-ink-600">{t("product.retail")}</span>
+                    <span className="font-medium tabular-nums text-black">
+                      {formatCurrency(product.price, locale, currency)}
+                      <span className="font-normal text-ink-400">
+                        {t("product.perItem")}
+                      </span>
+                    </span>
+                  </li>
+                  {tiers.map((tier) => {
+                    const active =
+                      pricing.appliedTier !== null &&
+                      pricing.appliedTier.id === tier.id;
+                    return (
+                      <li
+                        key={tier.id}
+                        className={cn(
+                          "flex items-center justify-between px-3 py-2 text-sm",
+                          active && "bg-ink-50"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "text-ink-600",
+                            active && "font-medium text-black"
+                          )}
+                        >
+                          {t("product.wholesaleFrom").replace(
+                            "{min}",
+                            String(tier.minQuantity)
+                          )}
+                        </span>
+                        <span
+                          className={cn(
+                            "tabular-nums text-black",
+                            active ? "font-semibold" : "font-medium"
+                          )}
+                        >
+                          {formatCurrency(tier.pricePerItem, locale, currency)}
+                          <span className="font-normal text-ink-400">
+                            {t("product.perItem")}
+                          </span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
 
             <p className="whitespace-pre-line text-sm leading-relaxed text-ink-600">
               {product.description[locale]}
