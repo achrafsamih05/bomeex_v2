@@ -107,6 +107,7 @@ export const messages: Dict = {
   },
   "checkout.shipping": { en: "Shipping", ar: "الشحن", fr: "Livraison" },
   "checkout.place": { en: "Place order", ar: "تأكيد الطلب", fr: "Passer la commande" },
+  "checkout.placing": { en: "Placing order…", ar: "جارٍ تأكيد الطلب…", fr: "Traitement en cours…" },
   "checkout.or": { en: "— or enter shipping details below —", ar: "— أو أدخل تفاصيل الشحن أدناه —", fr: "— ou saisissez les détails ci-dessous —" },
   "checkout.oneClick.title": {
     en: "One-click order with your saved profile",

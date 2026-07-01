@@ -83,6 +83,7 @@ export default function CheckoutPage() {
   const hasProfileAddress = Boolean(me?.address && me?.phone);
 
   async function placeWithProfile() {
+    if (submitting) return;
     setError(null);
     setSubmitting(true);
     try {
@@ -101,6 +102,7 @@ export default function CheckoutPage() {
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitting) return;
     const data = new FormData(e.currentTarget);
     setError(null);
 
@@ -208,9 +210,10 @@ export default function CheckoutPage() {
                 <button
                   onClick={placeWithProfile}
                   disabled={submitting}
-                  className="inline-flex h-10 items-center rounded-xl bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {submitting ? "…" : t("checkout.oneClick.cta")}
+                  {submitting && <Spinner />}
+                  {submitting ? t("checkout.placing") : t("checkout.oneClick.cta")}
                 </button>
               </div>
               <p className="mt-3 text-center text-xs text-ink-500">
@@ -279,9 +282,10 @@ export default function CheckoutPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="mt-2 inline-flex h-12 w-full items-center justify-center rounded-xl bg-ink-900 text-sm font-medium text-white hover:bg-ink-800 disabled:opacity-60"
+              className="mt-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-ink-900 text-sm font-medium text-white hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? "…" : t("checkout.place")}
+              {submitting && <Spinner />}
+              {submitting ? t("checkout.placing") : t("checkout.place")}
             </button>
           </form>
         </section>
@@ -415,6 +419,15 @@ function CitySelect({
       </div>
       {disabled && <p className="mt-1 text-xs text-ink-500">{emptyHint}</p>}
     </label>
+  );
+}
+
+function Spinner() {
+  return (
+    <span
+      className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+      aria-hidden="true"
+    />
   );
 }
 

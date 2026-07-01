@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import {
   createInvoice,
   createOrder,
+  DuplicateIdError,
   getProduct,
   getSettings,
   listActiveShippingRates,
@@ -114,36 +115,70 @@ export const POST = (req: NextRequest) =>
     const tax = +(subtotal * (settings.taxRate / 100)).toFixed(2);
     const total = +(subtotal + tax + shippingCost).toFixed(2);
 
-    const orderId = await nextOrderId();
-    const order: Order = {
-      id: orderId,
-      userId: user?.id,
-      customer: customer!,
-      items: orderItems,
-      subtotal,
-      tax,
-      shippingCity,
-      shippingCost,
-      total,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-    };
-    await createOrder(order);
-    emit({ channel: "orders", action: "created", id: order.id });
+    // Order/invoice ids are app-generated string keys ("o-1004"). Two
+    // simultaneous checkouts can compute the same next id before either row
+    // lands, producing a PK collision (Postgres 23505). We retry a few times
+    // with a freshly recomputed id — the previous winner is now visible so the
+    // next id advances past it. This is the concurrency-safe complement to the
+    // deletion-safe max-suffix logic in nextOrderId/nextInvoiceId.
+    const MAX_ID_RETRIES = 5;
+    let order: Order | null = null;
+
+    for (let attempt = 0; attempt < MAX_ID_RETRIES; attempt++) {
+      const orderId = await nextOrderId();
+      const candidate: Order = {
+        id: orderId,
+        userId: user?.id,
+        customer: customer!,
+        items: orderItems,
+        subtotal,
+        tax,
+        shippingCity,
+        shippingCost,
+        total,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      };
+      try {
+        await createOrder(candidate);
+        order = candidate;
+        break;
+      } catch (err) {
+        if (err instanceof DuplicateIdError && attempt < MAX_ID_RETRIES - 1) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!order) httpError(500, "Could not allocate a unique order id");
+    emit({ channel: "orders", action: "created", id: order!.id });
 
     const now = new Date();
     const due = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-    const invoiceId = await nextInvoiceId();
-    const number = `INV-${now.getFullYear()}-${invoiceId.replace("i-", "")}`;
-    await createInvoice({
-      id: invoiceId,
-      orderId: order.id,
-      number,
-      issuedAt: now.toISOString(),
-      dueAt: due.toISOString(),
-      status: "unpaid",
-      amount: total,
-    });
+
+    let invoiceId = "";
+    for (let attempt = 0; attempt < MAX_ID_RETRIES; attempt++) {
+      invoiceId = await nextInvoiceId();
+      const number = `INV-${now.getFullYear()}-${invoiceId.replace("i-", "")}`;
+      try {
+        await createInvoice({
+          id: invoiceId,
+          orderId: order!.id,
+          number,
+          issuedAt: now.toISOString(),
+          dueAt: due.toISOString(),
+          status: "unpaid",
+          amount: total,
+        });
+        break;
+      } catch (err) {
+        if (err instanceof DuplicateIdError && attempt < MAX_ID_RETRIES - 1) {
+          continue;
+        }
+        throw err;
+      }
+    }
     emit({ channel: "invoices", action: "created", id: invoiceId });
 
     return order;

@@ -72,6 +72,22 @@ import type {
 const sb = () => getSupabaseAdmin();
 
 /**
+ * Thrown when an insert violates a primary-key/unique constraint (Postgres
+ * error code 23505). Callers that generate their own string ids (orders,
+ * invoices) catch this to regenerate and retry rather than surfacing a 500.
+ */
+export class DuplicateIdError extends Error {
+  constructor(public readonly id: string) {
+    super(`Duplicate id: ${id}`);
+    this.name = "DuplicateIdError";
+  }
+}
+
+// Postgres unique_violation. Supabase surfaces the raw code on the error obj.
+const isUniqueViolation = (err: unknown): boolean =>
+  !!err && typeof err === "object" && (err as { code?: string }).code === "23505";
+
+/**
  * Log the full Supabase error (with code/hint/details) to server logs, then
  * throw an Error whose `.message` carries the real cause. Our API routes
  * wrap handlers in `handle()` (src/lib/server/http.ts), which turns thrown
@@ -386,7 +402,12 @@ export async function createOrder(o: Order): Promise<void> {
   };
 
   const { error: orderErr } = await sb().from("orders").insert(orderRow);
-  if (orderErr) raise("createOrder (orders insert)", orderErr);
+  if (orderErr) {
+    // Let the caller regenerate a fresh id + retry on a PK collision instead
+    // of bubbling up a 500 (see POST /api/orders).
+    if (isUniqueViolation(orderErr)) throw new DuplicateIdError(o.id);
+    raise("createOrder (orders insert)", orderErr);
+  }
 
   if (o.items.length > 0) {
     const itemRows = o.items.map<OrderItemRow>((i) => ({
@@ -468,13 +489,29 @@ export async function updateOrder(
   return getOrder(id);
 }
 
+/**
+ * Derives the next numeric suffix for a prefixed string id (e.g. "o-1004").
+ * We scan the existing ids and take `max(suffix) + 1` rather than a row COUNT:
+ * a count breaks the moment any row is deleted (the next insert reuses a live
+ * id → PK collision / Postgres 23505). Parsing the real max is deletion-safe.
+ * The value is still floored at `base + 1` so the very first id keeps its
+ * historical starting point even on an empty table.
+ */
+function nextSuffix(ids: readonly string[], prefix: string, base: number): number {
+  let max = base;
+  for (const id of ids) {
+    if (!id.startsWith(prefix)) continue;
+    const n = Number.parseInt(id.slice(prefix.length), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
 export async function nextOrderId(): Promise<string> {
-  const { count, error } = await sb()
-    .from("orders")
-    .select("id", { count: "exact", head: true });
+  const { data, error } = await sb().from("orders").select("id");
   if (error) raise("nextOrderId", error);
-  const n = 1000 + (count ?? 0) + 1;
-  return `o-${n}`;
+  const ids = ((data ?? []) as { id: string }[]).map((r) => r.id);
+  return `o-${nextSuffix(ids, "o-", 1000)}`;
 }
 
 // ---------- Invoices -------------------------------------------------------
@@ -508,7 +545,10 @@ export async function createInvoice(inv: Invoice): Promise<void> {
     status: inv.status,
     amount: inv.amount,
   });
-  if (error) raise("createInvoice", error);
+  if (error) {
+    if (isUniqueViolation(error)) throw new DuplicateIdError(inv.id);
+    raise("createInvoice", error);
+  }
 }
 
 export async function updateInvoice(
@@ -532,12 +572,10 @@ export async function updateInvoice(
 }
 
 export async function nextInvoiceId(): Promise<string> {
-  const { count, error } = await sb()
-    .from("invoices")
-    .select("id", { count: "exact", head: true });
+  const { data, error } = await sb().from("invoices").select("id");
   if (error) raise("nextInvoiceId", error);
-  const n = 5000 + (count ?? 0) + 1;
-  return `i-${n}`;
+  const ids = ((data ?? []) as { id: string }[]).map((r) => r.id);
+  return `i-${nextSuffix(ids, "i-", 5000)}`;
 }
 
 // ---------- Users ----------------------------------------------------------
