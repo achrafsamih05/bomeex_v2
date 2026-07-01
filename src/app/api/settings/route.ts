@@ -52,6 +52,29 @@ function url(value: unknown): string | undefined {
   }
 }
 
+/**
+ * Normalise a WhatsApp value. The admin may paste either:
+ *   - "" (clear the field)
+ *   - a full click-to-chat link (https://wa.me/2126..., https://api.whatsapp.com/…)
+ *   - a bare phone number in any human format ("+212 6 12 34 56 78")
+ * A bare number is reduced to its digits and turned into the canonical
+ * wa.me link. Full URLs are passed through the generic url() validator.
+ */
+function whatsapp(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().slice(0, MAX_URL);
+  if (trimmed === "") return "";
+  // Looks like a URL already → validate as one.
+  if (/^https?:\/\//i.test(trimmed) || /wa\.me|whatsapp\.com/i.test(trimmed)) {
+    return url(trimmed);
+  }
+  // Otherwise treat it as a phone number: keep digits only (drop +, spaces,
+  // dashes, parens) and build the standard wa.me link.
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length < 6) return undefined;
+  return `https://wa.me/${digits}`;
+}
+
 // PATCH /api/settings — admin only. Updates the Supabase settings row.
 // No filesystem access anywhere in this path.
 export const PATCH = (req: NextRequest) =>
@@ -107,6 +130,8 @@ export const PATCH = (req: NextRequest) =>
     if (ln !== undefined) patch.linkedinUrl = ln;
     const tk = url(body.tiktokUrl);
     if (tk !== undefined) patch.tiktokUrl = tk;
+    const wa = whatsapp(body.whatsappUrl);
+    if (wa !== undefined) patch.whatsappUrl = wa;
 
     const updated = await updateSettings(patch);
     emit({ channel: "settings", action: "updated" });

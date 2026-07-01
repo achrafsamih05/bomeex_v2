@@ -265,6 +265,15 @@ export default function AdminSettings() {
                   placeholder="https://tiktok.com/@your-store"
                 />
               </Field>
+              <Field label="WhatsApp URL / Number">
+                <input
+                  type="text"
+                  value={form.whatsappUrl}
+                  onChange={(e) => set("whatsappUrl", e.target.value)}
+                  className={inputCls}
+                  placeholder="+212 6 12 34 56 78 or https://wa.me/2126..."
+                />
+              </Field>
             </div>
           </section>
 

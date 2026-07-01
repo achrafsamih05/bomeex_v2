@@ -237,4 +237,7 @@ export interface Settings {
   youtubeUrl: string;
   linkedinUrl: string;
   tiktokUrl: string;
+  // WhatsApp is stored as a full click-to-chat URL (https://wa.me/<number>).
+  // A bare number is auto-normalised into that form by the settings API.
+  whatsappUrl: string;
 }

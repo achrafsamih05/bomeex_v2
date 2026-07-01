@@ -708,6 +708,7 @@ export async function getSettings(): Promise<Settings> {
       youtubeUrl: "",
       linkedinUrl: "",
       tiktokUrl: "",
+      whatsappUrl: "",
     };
   }
   return settingsFromRow(data as unknown as SettingsRow);

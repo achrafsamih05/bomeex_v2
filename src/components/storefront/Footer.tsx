@@ -47,6 +47,8 @@ function socialLinks(s: Settings): SocialLink[] {
     // TikTok doesn't have a dedicated lucide icon; Music2 is the chosen
     // stand-in and matches the convention on most admin UIs.
     [s.tiktokUrl, "Music2", "TikTok"],
+    // WhatsApp uses our hand-built brand glyph registered in <Icon />.
+    [s.whatsappUrl, "WhatsApp", "WhatsApp"],
   ];
   return entries
     .filter(([href]) => href && href.trim().length > 0)
@@ -74,6 +76,7 @@ export function Footer() {
     youtubeUrl: "",
     linkedinUrl: "",
     tiktokUrl: "",
+    whatsappUrl: "",
   };
 
   const socials = socialLinks(s);
